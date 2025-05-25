@@ -13,7 +13,8 @@ class Usuario {
   final bool    usua_Estado;
   final bool    usua_EsEmpleado;
   final String? empleado;
-  final String? role_Nombre;  // Cambiado a opcional
+  final String? persona;
+  final String? role_Nombre;  
   final String? pantallas;
   final String? pers_Correo;
   final int?    code_Status;
@@ -34,7 +35,8 @@ class Usuario {
     required this.usua_Estado,
     required this.usua_EsEmpleado,
     this.empleado,
-    this.role_Nombre,  // Cambiado a opcional
+    this.persona,
+    this.role_Nombre, 
     this.pantallas,
     this.pers_Correo,
     this.code_Status,
@@ -57,6 +59,7 @@ class Usuario {
       usua_Estado: json['usua_Estado'] ?? false,
       usua_EsEmpleado: json['usua_EsEmpleado'] ?? false,
       empleado: json['empleado'],
+      persona: json['persona'],
       role_Nombre: json['role_Nombre'],
       pantallas: json['pantallas'],
       pers_Correo: json['pers_Correo'],
