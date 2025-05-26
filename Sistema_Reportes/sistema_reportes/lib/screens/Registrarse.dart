@@ -1,133 +1,130 @@
-
 import 'package:flutter/material.dart';
 import '../services/usuarioService.dart';
 import '../screens/login.dart';
-
 
 class RegistrarseScreen extends StatefulWidget {
   const RegistrarseScreen({super.key});
 
   @override
-  State<RegistrarseScreen> createState() => _RegistrarseScreenState();
+  State<RegistrarseScreen> createState() => _RegistroScreenState();
 }
 
-class _RegistrarseScreenState extends State<RegistrarseScreen> {
-  /// Controlador para el campo de texto del usuario
-  final TextEditingController _usuarioController = TextEditingController();
-  
-  /// Controlador para el campo de texto de la contraseña
-  final TextEditingController _contrasenaController = TextEditingController();
-  
-  /// Controlador para el campo de confirmar contraseña
-  final TextEditingController _confirmarContrasenaController = TextEditingController();
-  
-  /// Controlador para el campo del ID de persona
-  final TextEditingController _persIdController = TextEditingController();
-  
-  /// Clave global para acceder y validar el formulario
+class _RegistroScreenState extends State<RegistrarseScreen> {
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
-  
-  /// Servicio para realizar operaciones de registro con la API
   final UsuarioService _usuarioService = UsuarioService();
 
-  /// Indica si se está procesando la solicitud de registro
-  bool _cargando = false;
-  
-  /// Mensaje de éxito o error para mostrar al usuario
-  String _mensaje = '';
-  
-  /// Controla si el usuario será administrador
-  bool _esAdmin = false;
-  
-  /// Controla si el usuario será empleado
-  bool _esEmpleado = false;
+  // Controladores para campos de usuario
+  final TextEditingController _usuarioController = TextEditingController();
+  final TextEditingController _contrasenaController = TextEditingController();
+  final TextEditingController _confirmarContrasenaController = TextEditingController();
 
-  /// Libera recursos cuando el widget se elimina del árbol de widgets
+  // Controladores para campos de persona
+  final TextEditingController _dniController = TextEditingController();
+  final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _apellidoController = TextEditingController();
+  final TextEditingController _telefonoController = TextEditingController();
+  final TextEditingController _correoController = TextEditingController();
+  final TextEditingController _direccionController = TextEditingController();
+  final TextEditingController _municipioController = TextEditingController();
+
+  // Variables de estado
+  bool _cargando = false;
+  String _mensaje = '';
+  String _sexoSeleccionado = 'M';
+  int _estadoCivilSeleccionado = 1;
+
+  // Opciones para dropdowns
+  final List<Map<String, dynamic>> _opcionesSexo = [
+    {'valor': 'M', 'texto': 'Masculino'},
+    {'valor': 'F', 'texto': 'Femenino'},
+  ];
+
+  final List<Map<String, dynamic>> _opcionesEstadoCivil = [
+    {'valor': 1, 'texto': 'Soltero/a'},
+    {'valor': 2, 'texto': 'Casado/a'},
+    {'valor': 3, 'texto': 'Divorciado/a'},
+    {'valor': 4, 'texto': 'Viudo/a'},
+  ];
+
   @override
   void dispose() {
     _usuarioController.dispose();
     _contrasenaController.dispose();
     _confirmarContrasenaController.dispose();
-    _persIdController.dispose();
+    _dniController.dispose();
+    _nombreController.dispose();
+    _apellidoController.dispose();
+    _telefonoController.dispose();
+    _correoController.dispose();
+    _direccionController.dispose();
+    _municipioController.dispose();
     super.dispose();
   }
 
-  /// Maneja el proceso de registro de usuario
-  /// 
-  /// Este método se ejecuta cuando el usuario presiona el botón de registro.
-  /// Realiza las siguientes acciones:
-  /// 1. Valida que los campos del formulario sean correctos
-  /// 2. Verifica que las contraseñas coincidan
-  /// 3. Muestra un indicador de carga
-  /// 4. Llama al servicio de registro con los datos ingresados
-  /// 5. Si el registro es exitoso, navega a la pantalla de login
-  /// 6. Si el registro falla, muestra un mensaje de error
-  void _registrarUsuario() async {
-    // Validar el formulario
-    if (!_formkey.currentState!.validate()) return;
-    
-    // Verificar que las contraseñas coincidan
-    if (_contrasenaController.text.trim() != _confirmarContrasenaController.text.trim()) {
+  Future<void> _registrarUsuario() async {
+    if (!_formkey.currentState!.validate()) {
+      return;
+    }
+
+    // Validar confirmación de contraseña
+    if (_contrasenaController.text != _confirmarContrasenaController.text) {
       setState(() {
-        _mensaje = 'Las contraseñas no coinciden';
+        _mensaje = 'Las contraseñas no coinciden.';
       });
       return;
     }
-    
-    // Mostrar indicador de carga y limpiar mensajes previos
+
     setState(() {
       _cargando = true;
       _mensaje = '';
     });
 
     try {
-      // Llamar al servicio de registro
       final resultado = await _usuarioService.registro(
+        // Datos de usuario
         usuario: _usuarioController.text.trim(),
-        contrasena: _contrasenaController.text.trim(),
-        persId: int.parse(_persIdController.text.trim()),
-        esAdmin: _esAdmin,
-        esEmpleado: _esEmpleado,
+        contrasena: _contrasenaController.text,
+        usuaCreacion: 1,
+        
+        // Datos de persona
+        dni: _dniController.text.trim(),
+        nombre: _nombreController.text.trim(),
+        apellido: _apellidoController.text.trim(),
+        sexo: _sexoSeleccionado,
+        telefono: _telefonoController.text.trim(),
+        correo: _correoController.text.trim(),
+        direccion: _direccionController.text.trim(),
+        municipioCodigo: _municipioController.text.trim(),
+        estadoCivilId: _estadoCivilSeleccionado,
       );
 
-      // Verificar si el registro fue exitoso
+      setState(() {
+        _mensaje = resultado['message_Status'] ?? 'Respuesta desconocida';
+      });
+
+      // Si el registro fue exitoso, navegar al login después de 2 segundos
       if (resultado['success'] == true) {
-        // Mostrar mensaje de éxito
-        setState(() {
-          _mensaje = resultado['message_Status'] ?? 'Usuario registrado correctamente';
-        });
-
-        // Esperar un momento para que el usuario lea el mensaje
         await Future.delayed(const Duration(seconds: 2));
-
-        // Navegar de vuelta a la pantalla de login
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
-      } else {
-        // Mostrar mensaje de error
-        setState(() {
-          _mensaje = resultado['message_Status'] ?? 'Error al registrar usuario';
-        });
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
+        }
       }
     } catch (e) {
-      // Capturar y mostrar cualquier error que ocurra durante el registro
       setState(() {
-        _mensaje = 'Error al registrar usuario: $e';
+        _mensaje = 'Error: ${e.toString()}';
       });
     } finally {
-      // Ocultar el indicador de carga al finalizar
       setState(() {
         _cargando = false;
       });
     }
   }
 
-  /// Construye la interfaz de usuario de la pantalla de registro
   @override
   Widget build(BuildContext context) {
-    // Obtener el color primario del tema para usarlo en los elementos de la interfaz
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -147,7 +144,7 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
         ),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 80),
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 50),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -165,7 +162,7 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 50),
+                const SizedBox(height: 30),
 
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -182,9 +179,7 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                   ),
                   child: Column(
                     children: [
-                      // ===============================================================
-                      // TAB DE NAVEGACIÓN (INICIAR SESIÓN / REGISTRARSE)
-                      // ===============================================================
+                      // TAB DE NAVEGACIÓN
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
@@ -192,11 +187,9 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                         ),
                         child: Row(
                           children: [
-                            // Tab "Iniciar Sesión" (no seleccionado en esta pantalla)
                             Expanded(
                               child: GestureDetector(
                                 onTap: () {
-                                  // Navegar de vuelta a la pantalla de login
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
@@ -207,7 +200,6 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    // Este tab no está seleccionado, por lo que tiene fondo transparente
                                     color: Colors.transparent,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -215,7 +207,6 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                                     child: Text(
                                       'Iniciar Sesión',
                                       style: TextStyle(
-                                        // Texto negro para el tab no seleccionado
                                         color: Colors.black87,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -224,27 +215,19 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                                 ),
                               ),
                             ),
-                            // Tab "Registrarse" (seleccionado en esta pantalla)
                             Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  // Ya estamos en la pantalla de registro, no necesitamos navegación
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  decoration: BoxDecoration(
-                                    // Este tab está seleccionado, por lo que tiene fondo azul
-                                    color: Colors.blue.shade700,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Registrarse',
-                                      style: TextStyle(
-                                        // Texto blanco para el tab seleccionado
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade700,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'Registrarse',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
@@ -270,180 +253,385 @@ class _RegistrarseScreenState extends State<RegistrarseScreen> {
                             ),
                             const SizedBox(height: 20),
 
-                            // Campo Usuario
-                            TextFormField(
-                              controller: _usuarioController,
-                              decoration: InputDecoration(
-                                labelText: 'Usuario',
-                                hintText: 'Ingrese su nombre de usuario',
-                                prefixIcon: const Icon(Icons.person),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
-                                  ),
-                                ),
+                            // SECCIÓN: DATOS PERSONALES
+                            Container(
+                              padding: const EdgeInsets.all(15),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.blue.shade200),
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'El campo usuario es requerido.';
-                                }
-                                if (value.length < 3) {
-                                  return 'El usuario debe tener al menos 3 caracteres.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Campo ID de Persona
-                            TextFormField(
-                              controller: _persIdController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: 'ID de Persona',
-                                hintText: 'Ingrese el ID de la persona',
-                                prefixIcon: const Icon(Icons.badge),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Datos Personales',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue.shade700,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'El ID de persona es requerido.';
-                                }
-                                if (int.tryParse(value) == null) {
-                                  return 'Debe ingresar un número válido.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Campo Contraseña
-                            TextFormField(
-                              controller: _contrasenaController,
-                              obscureText: true,
-                              decoration: InputDecoration(
-                                labelText: 'Contraseña',
-                                hintText: 'Ingrese su contraseña',
-                                prefixIcon: const Icon(Icons.lock),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'El campo contraseña es requerido.';
-                                }
-                                if (value.length < 6) {
-                                  return 'La contraseña debe tener al menos 6 caracteres.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Campo Confirmar Contraseña
-                            TextFormField(
-                              controller: _confirmarContrasenaController,
-                              obscureText: true,
-                              decoration: InputDecoration(
-                                labelText: 'Confirmar Contraseña',
-                                hintText: 'Confirme su contraseña',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Debe confirmar la contraseña.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Checkboxes para roles
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Checkbox(
-                                        value: _esAdmin,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _esAdmin = value ?? false;
-                                          });
-                                        },
-                                        activeColor: Colors.blue.shade700,
+                                  const SizedBox(height: 15),
+                                  
+                                  // DNI
+                                  TextFormField(
+                                    controller: _dniController,
+                                    keyboardType: TextInputType.text,
+                                    decoration: InputDecoration(
+                                      labelText: 'DNI / Identidad',
+                                      hintText: 'Ej: 0801199812345',
+                                      prefixIcon: const Icon(Icons.credit_card),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
-                                      const Expanded(
-                                        child: Text(
-                                          'Es Administrador',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.black87,
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'El DNI es requerido.';
+                                      }
+                                      if (value.length < 13) {
+                                        return 'El DNI debe tener al menos 13 caracteres.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Nombre y Apellido en fila
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _nombreController,
+                                          decoration: InputDecoration(
+                                            labelText: 'Nombre',
+                                            hintText: 'Tu nombre',
+                                            prefixIcon: const Icon(Icons.person),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                              borderSide: BorderSide(color: primaryColor, width: 2),
+                                            ),
                                           ),
+                                          validator: (value) {
+                                            if (value == null || value.isEmpty) {
+                                              return 'Nombre requerido';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextFormField(
+                                          controller: _apellidoController,
+                                          decoration: InputDecoration(
+                                            labelText: 'Apellido',
+                                            hintText: 'Tu apellido',
+                                            prefixIcon: const Icon(Icons.person_outline),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                              borderSide: BorderSide(color: primaryColor, width: 2),
+                                            ),
+                                          ),
+                                          validator: (value) {
+                                            if (value == null || value.isEmpty) {
+                                              return 'Apellido requerido';
+                                            }
+                                            return null;
+                                          },
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                Expanded(
-                                  child: Row(
+                                  const SizedBox(height: 15),
+
+                                  // Sexo y Estado Civil en fila
+                                  Row(
                                     children: [
-                                      Checkbox(
-                                        value: _esEmpleado,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _esEmpleado = value ?? false;
-                                          });
-                                        },
-                                        activeColor: Colors.blue.shade700,
-                                      ),
-                                      const Expanded(
-                                        child: Text(
-                                          'Es Empleado',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.black87,
+                                      Expanded(
+                                        child: DropdownButtonFormField<String>(
+                                          value: _sexoSeleccionado,
+                                          decoration: InputDecoration(
+                                            labelText: 'Sexo',
+                                            prefixIcon: const Icon(Icons.wc),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                              borderSide: BorderSide(color: primaryColor, width: 2),
+                                            ),
                                           ),
+                                          items: _opcionesSexo.map((opcion) {
+                                            return DropdownMenuItem<String>(
+                                              value: opcion['valor'],
+                                              child: Text(opcion['texto']),
+                                            );
+                                          }).toList(),
+                                          onChanged: (valor) {
+                                            setState(() {
+                                              _sexoSeleccionado = valor!;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: DropdownButtonFormField<int>(
+                                          value: _estadoCivilSeleccionado,
+                                          decoration: InputDecoration(
+                                            labelText: 'Estado Civil',
+                                            prefixIcon: const Icon(Icons.favorite),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                              borderSide: BorderSide(color: primaryColor, width: 2),
+                                            ),
+                                          ),
+                                          items: _opcionesEstadoCivil.map((opcion) {
+                                            return DropdownMenuItem<int>(
+                                              value: opcion['valor'],
+                                              child: Text(opcion['texto']),
+                                            );
+                                          }).toList(),
+                                          onChanged: (valor) {
+                                            setState(() {
+                                              _estadoCivilSeleccionado = valor!;
+                                            });
+                                          },
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 15),
+
+                                  // Teléfono
+                                  TextFormField(
+                                    controller: _telefonoController,
+                                    keyboardType: TextInputType.phone,
+                                    decoration: InputDecoration(
+                                      labelText: 'Teléfono',
+                                      hintText: 'Ej: 98765432',
+                                      prefixIcon: const Icon(Icons.phone),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'El teléfono es requerido.';
+                                      }
+                                      if (value.length < 8) {
+                                        return 'Teléfono debe tener al menos 8 dígitos.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Correo
+                                  TextFormField(
+                                    controller: _correoController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    decoration: InputDecoration(
+                                      labelText: 'Correo Electrónico',
+                                      hintText: 'ejemplo@correo.com',
+                                      prefixIcon: const Icon(Icons.email),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'El correo es requerido.';
+                                      }
+                                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                        return 'Ingrese un correo válido.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Dirección
+                                  TextFormField(
+                                    controller: _direccionController,
+                                    maxLines: 2,
+                                    decoration: InputDecoration(
+                                      labelText: 'Dirección',
+                                      hintText: 'Tu dirección completa',
+                                      prefixIcon: const Icon(Icons.home),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'La dirección es requerida.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Municipio
+                                  TextFormField(
+                                    controller: _municipioController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Código de Municipio',
+                                      hintText: 'Ej: 0801',
+                                      prefixIcon: const Icon(Icons.location_city),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'El código de municipio es requerido.';
+                                      }
+                                      if (value.length != 4) {
+                                        return 'El código debe tener 4 dígitos.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 20),
+
+                            // SECCIÓN: DATOS DE USUARIO
+                            Container(
+                              padding: const EdgeInsets.all(15),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Datos de Usuario',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Usuario
+                                  TextFormField(
+                                    controller: _usuarioController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Nombre de Usuario',
+                                      hintText: 'Ej: usuario123',
+                                      prefixIcon: const Icon(Icons.account_circle),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'El usuario es requerido.';
+                                      }
+                                      if (value.length < 3) {
+                                        return 'El usuario debe tener al menos 3 caracteres.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Contraseña
+                                  TextFormField(
+                                    controller: _contrasenaController,
+                                    obscureText: true,
+                                    decoration: InputDecoration(
+                                      labelText: 'Contraseña',
+                                      hintText: 'Mínimo 6 caracteres',
+                                      prefixIcon: const Icon(Icons.lock),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'La contraseña es requerida.';
+                                      }
+                                      if (value.length < 6) {
+                                        return 'La contraseña debe tener al menos 6 caracteres.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 15),
+
+                                  // Confirmar Contraseña
+                                  TextFormField(
+                                    controller: _confirmarContrasenaController,
+                                    obscureText: true,
+                                    decoration: InputDecoration(
+                                      labelText: 'Confirmar Contraseña',
+                                      hintText: 'Repite tu contraseña',
+                                      prefixIcon: const Icon(Icons.lock_outline),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        borderSide: BorderSide(color: primaryColor, width: 2),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Debe confirmar la contraseña.';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 25),
 
                             // Botón de registro
                             SizedBox(
