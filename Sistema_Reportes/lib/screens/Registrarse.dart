@@ -21,7 +21,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   final ConnectivityService _connectivityService = ConnectivityService();
 
   // Para manejar la suscripción a cambios de conectividad
-  late Stream<List<ConnectivityResult>> _connectivityStream;
+  late Stream<ConnectivityResult> _connectivityStream;
 
   // Controladores para campos de usuario
   final TextEditingController _usuarioController = TextEditingController();
@@ -76,17 +76,15 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     _cargarEstadosCiviles();
 
     // Configurar la escucha de cambios en la conectividad
-    _connectivityStream = _connectivityService.onConnectivityChanged();
+    _connectivityStream = _connectivityService.onConnectivityChanged;
     _connectivityStream.listen(_handleConnectivityChange);
   }
 
   /// Maneja los cambios en la conectividad
-  void _handleConnectivityChange(List<ConnectivityResult> result) async {
+  void _handleConnectivityChange(ConnectivityResult result) async {
     // Si hay alguna conexión y no tenemos estados civiles cargados
     // intentamos cargar los datos nuevamente
-    if (!result.contains(ConnectivityResult.none) &&
-        _cargandoEstadosCiviles == false &&
-        _estadosCiviles.isEmpty) {
+    if (result != ConnectivityResult.none && _estadosCiviles.isEmpty) {
       // Esperamos un momento para asegurarnos de que la conexión sea estable
       await Future.delayed(const Duration(seconds: 1));
       // Verificamos si realmente hay conexión a internet
@@ -165,9 +163,23 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     bool mostrarProgreso = false,
     int duracionSegundos = 3,
   }) {
-    // Cerrar la notificación anterior si existe
-    _currentFlushbar?.dismiss();
+    // Evitar mostrar notificaciones si el widget no está montado
+    if (!mounted) return;
+    
+    // Cerrar la notificación anterior de manera segura
+    if (_currentFlushbar != null) {
+      // Usar try-catch para evitar errores si la notificación ya está cerrada
+      try {
+        _currentFlushbar?.dismiss();
+      } catch (e) {
+        // Ignorar errores al cerrar la notificación
+        print('Error al cerrar notificación: $e');
+      }
+      // Asegurar que la referencia se limpie
+      _currentFlushbar = null;
+    }
 
+    // Crear y mostrar la nueva notificación
     _currentFlushbar = Flushbar(
       message: mensaje,
       icon: Icon(icono, size: 28.0, color: Colors.white),
@@ -188,7 +200,21 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       showProgressIndicator: mostrarProgreso,
       progressIndicatorBackgroundColor: Colors.white.withOpacity(0.3),
       progressIndicatorValueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-    )..show(context);
+      // Manejar el evento de descarte para limpiar la referencia
+      onStatusChanged: (status) {
+        if (status == FlushbarStatus.DISMISSED) {
+          _currentFlushbar = null;
+        }
+      },
+    );
+    
+    // Mostrar la notificación de manera segura
+    try {
+      _currentFlushbar!.show(context);
+    } catch (e) {
+      print('Error al mostrar notificación: $e');
+      _currentFlushbar = null;
+    }
   }
 
   /// Muestra una notificación de error
@@ -224,6 +250,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   @override
   void dispose() {
+    // Liberar controladores
     _usuarioController.dispose();
     _contrasenaController.dispose();
     _confirmarContrasenaController.dispose();
@@ -234,8 +261,17 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     _correoController.dispose();
     _direccionController.dispose();
     _municipioController.dispose();
-    // Cerrar cualquier notificación pendiente
-    _currentFlushbar?.dismiss();
+    
+    // Cerrar cualquier notificación pendiente de manera segura
+    if (_currentFlushbar != null) {
+      try {
+        _currentFlushbar?.dismiss();
+      } catch (e) {
+        print('Error al cerrar notificación en dispose: $e');
+      }
+      _currentFlushbar = null;
+    }
+    
     super.dispose();
   }
 
@@ -288,8 +324,15 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         estadoCivilId: _estadoCivilSeleccionado!,
       );
 
-      // Cerrar cualquier notificación anterior para evitar conflictos
-      _currentFlushbar?.dismiss();
+      // Cerrar cualquier notificación anterior de manera segura
+      if (_currentFlushbar != null) {
+        try {
+          _currentFlushbar?.dismiss();
+        } catch (e) {
+          print('Error al cerrar notificación: $e');
+        }
+        _currentFlushbar = null;
+      }
       
       // Obtener el código de estado y mensaje
       final codeStatus = resultado['code_Status'] ?? 0;
