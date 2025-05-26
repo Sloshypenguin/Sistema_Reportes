@@ -260,12 +260,12 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       _cargando = true;
     });
 
-    // Verificamos que el estado civil esté seleccionado
-    if (_estadoCivilSeleccionado == null) {
+    // Verificamos que el estado civil esté seleccionado y sea válido
+    if (_estadoCivilSeleccionado == null || _estadoCivilSeleccionado == 0) {
       setState(() {
         _cargando = false;
       });
-      _mostrarError('Por favor, seleccione un estado civil.');
+      _mostrarError('Por favor, seleccione un estado civil válido.');
       return;
     }
 
@@ -288,14 +288,20 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         estadoCivilId: _estadoCivilSeleccionado!,
       );
 
-      if (resultado['success'] == true) {
-        // Cerrar cualquier notificación anterior para evitar conflictos
-        _currentFlushbar?.dismiss();
-        
-        // Mostrar mensaje de éxito sin usar Flushbar para evitar conflictos con la navegación
+      // Cerrar cualquier notificación anterior para evitar conflictos
+      _currentFlushbar?.dismiss();
+      
+      // Obtener el código de estado y mensaje
+      final codeStatus = resultado['code_Status'] ?? 0;
+      final messageStatus = resultado['message_Status'] ?? 'Sin mensaje';
+      
+      // Manejar la respuesta según el código de estado
+      // 1 = Éxito, -1 = Advertencia, 0 = Error
+      if (codeStatus == 1) {
+        // Éxito: Mostrar mensaje y navegar al login
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(resultado['message_Status'] ?? '¡Registro exitoso!'),
+            content: Text(messageStatus),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 1),
           ),
@@ -333,11 +339,17 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
             );
           }
         });
-      } else {
-        // Mostrar mensaje de error
-        _mostrarError(
-          resultado['message_Status'] ?? 'No se pudo completar el registro.',
+      } else if (codeStatus == -1) {
+        // Advertencia: Mostrar mensaje de advertencia pero no navegar
+        _mostrarNotificacion(
+          mensaje: messageStatus,
+          color: Colors.orange.shade700,
+          icono: Icons.warning_amber_outlined,
+          duracionSegundos: 5,
         );
+      } else {
+        // Error: Mostrar mensaje de error
+        _mostrarError(messageStatus);
       }
     } catch (e) {
       _mostrarError(
@@ -528,7 +540,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                 }).toList(),
               ],
               validator: (value) {
-                if (value == null) {
+                if (value == null || value == 0) {
                   return 'Por favor seleccione un estado civil';
                 }
                 return null;
