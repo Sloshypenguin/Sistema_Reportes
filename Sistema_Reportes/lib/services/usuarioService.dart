@@ -2,30 +2,37 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/usuarioViewModel.dart';
 import '../models/apiResponse.dart';
+import '../config/api_config.dart';
+import '../services/connectivityService.dart';
 
 /// Servicio para manejar operaciones relacionadas con usuarios
 class UsuarioService {
-  /// URL base del servidor API
-  final String _baseUrl = 'http://sistemareportesgob.somee.com';
-
-  /// Clave API para autenticación con el servidor
-  final String _apiKey = 'bdccf3f3-d486-4e1e-ab44-74081aefcdbc';
-
-  /// Formatea una fecha en formato ISO 8601 UTC
-  String _formatearFechaIso(DateTime fecha) {
-    final fechaMinSql = DateTime(1753, 1, 1);
-    if (fecha.isBefore(fechaMinSql)) {
-      return fechaMinSql.toUtc().toIso8601String();
-    }
-    return fecha.toUtc().toIso8601String(); // Ej: 2025-05-25T22:16:42.710Z
-  }
+  /// Servicio para verificar la conectividad a internet
+  final ConnectivityService _connectivityService = ConnectivityService();
 
   /// Autentica a un usuario con sus credenciales
   Future<Usuario?> login(String usuario, String contrasena) async {
-    final url = Uri.parse('$_baseUrl/Usuarios/Login');
+    // Verificar conectividad antes de realizar la solicitud - con doble verificación
+    // para asegurar que detectamos correctamente cuando se recupera la conexión
+    bool hasConnection = false;
+    
+    // Primer intento
+    hasConnection = await _connectivityService.hasConnection();
+    
+    // Si no hay conexión, esperamos un momento y volvemos a verificar
+    // (esto ayuda en casos donde la conexión se acaba de recuperar)
+    if (!hasConnection) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      hasConnection = await _connectivityService.hasConnection();
+    }
+    
+    if (!hasConnection) {
+      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+    }
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Login');
     final response = await http.post(
       url,
-      headers: {'Content-Type': 'application/json', 'X-API-KEY': _apiKey},
+      headers: ApiConfig.headers,
       body: jsonEncode({
         'usua_Usuario': usuario,
         'usua_Contrasena': contrasena,
@@ -44,7 +51,9 @@ class UsuarioService {
 
       return apiResponse.data.first;
     } else {
-      throw Exception('Error en el Servidor: ${response.statusCode}');
+      // Registrar el error técnico internamente
+      print('Error técnico en el servidor: ${response.statusCode}');
+      throw Exception('No se pudo iniciar sesión. Por favor, intenta nuevamente.');
     }
   }
 
@@ -65,11 +74,30 @@ class UsuarioService {
     required String municipioCodigo,
     required int estadoCivilId,
   }) async {
-    final url = Uri.parse('$_baseUrl/Usuarios/Registrar');
+    // Verificar conectividad antes de realizar la solicitud - con doble verificación
+    // para asegurar que detectamos correctamente cuando se recupera la conexión
+    bool hasConnection = false;
+    
+    // Primer intento
+    hasConnection = await _connectivityService.hasConnection();
+    
+    // Si no hay conexión, esperamos un momento y volvemos a verificar
+    // (esto ayuda en casos donde la conexión se acaba de recuperar)
+    if (!hasConnection) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      hasConnection = await _connectivityService.hasConnection();
+    }
+    
+    if (!hasConnection) {
+      return {
+        'success': false,
+        'code_Status': 0,
+        'message_Status': 'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+      };
+    }
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Registrar');
 
     try {
-      final now = DateTime.now();
-      final fechaCreacion = _formatearFechaIso(now);
 
       final personaJson = {
         'Pers_DNI': dni,
@@ -82,7 +110,6 @@ class UsuarioService {
         'Muni_Codigo': municipioCodigo,
         'EsCi_Id': estadoCivilId,
         'Pers_Creacion': usuaCreacion,
-        'Pers_FechaCreacion': fechaCreacion,
       };
 
       final bodyData = {
@@ -90,12 +117,11 @@ class UsuarioService {
         'Usua_Usuario': usuario,
         'Usua_Contrasena': contrasena,
         'Usua_Creacion': usuaCreacion,
-        'FechaCreacion': fechaCreacion,
       };
 
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json', 'X-API-KEY': _apiKey},
+        headers: ApiConfig.headers,
         body: jsonEncode(bodyData),
       );
 
@@ -122,81 +148,30 @@ class UsuarioService {
           };
         }
 
+        // Registrar el error técnico internamente
+        print('Respuesta inesperada del servidor: ${response.body}');
         return {
           'success': false,
           'code_Status': 0,
-          'message_Status': 'Respuesta inesperada del servidor: ${response.body}',
+          'message_Status': 'No se pudo completar el registro. Por favor, intenta nuevamente más tarde.',
         };
       } else {
+        // Registrar el error técnico internamente
+        print('Error HTTP ${response.statusCode}: ${response.body}');
         return {
           'success': false,
           'code_Status': 0,
-          'message_Status': 'Error HTTP ${response.statusCode}: ${response.body}',
+          'message_Status': 'No se pudo completar el registro. Por favor, verifica tus datos e intenta nuevamente.',
         };
       }
     } catch (e) {
+      // Registrar el error técnico internamente
+      print('Error de conexión: ${e.toString()}');
       return {
         'success': false,
         'code_Status': 0,
-        'message_Status': 'Error de conexión: ${e.toString()}',
+        'message_Status': 'No se pudo conectar al servidor. Por favor, verifica tu conexión a internet e intenta nuevamente.',
       };
     }
-  }
-
-  /// Método alternativo que devuelve un objeto Usuario con la respuesta del registro
-  Future<Usuario> registroUsuario({
-    required String usuario,
-    required String contrasena,
-    int usuaCreacion = 1,
-    required String dni,
-    required String nombre,
-    required String apellido,
-    required String sexo,
-    required String telefono,
-    required String correo,
-    required String direccion,
-    required String municipioCodigo,
-    required int estadoCivilId,
-  }) async {
-    final resultado = await registro(
-      usuario: usuario,
-      contrasena: contrasena,
-      usuaCreacion: usuaCreacion,
-      dni: dni,
-      nombre: nombre,
-      apellido: apellido,
-      sexo: sexo,
-      telefono: telefono,
-      correo: correo,
-      direccion: direccion,
-      municipioCodigo: municipioCodigo,
-      estadoCivilId: estadoCivilId,
-    );
-
-    final now = DateTime.now();
-    final fechaCreacion = _formatearFechaIso(now);
-
-    return Usuario(
-      usua_Id: 0,
-      usua_Usuario: usuario,
-      usua_Contrasena: null,
-      pers_Id: 0,
-      role_Id: 3,
-      usua_EsAdmin: false,
-      usua_Creacion: usuaCreacion,
-      usua_FechaCreacion: fechaCreacion,
-      usua_Modificacion: null,
-      usua_FechaModificacion: null,
-      usua_Token: null,
-      usua_Estado: resultado['success'] == true,
-      usua_EsEmpleado: false,
-      empleado: null,
-      persona: null,
-      role_Nombre: null,
-      pantallas: null,
-      pers_Correo: correo,
-      code_Status: resultado['code_Status'],
-      message_Status: resultado['message_Status'],
-    );
   }
 }

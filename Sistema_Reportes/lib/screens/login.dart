@@ -20,7 +20,7 @@ import '../screens/principal.dart';
 import '../screens/Registrarse.dart';
 
 /// Widget principal de la pantalla de login.
-/// 
+///
 /// Esta pantalla permite a los usuarios iniciar sesión en el sistema
 /// y también proporciona navegación a la pantalla de registro.
 /// Implementa un diseño moderno con gradiente de fondo, tarjeta de
@@ -33,37 +33,37 @@ class LoginScreen extends StatefulWidget {
 }
 
 /// Estado del widget LoginScreen.
-/// 
+///
 /// Maneja la lógica de autenticación, almacenamiento seguro de credenciales
 /// y navegación entre pantallas.
 class _LoginScreenState extends State<LoginScreen> {
   /// Controlador para el campo de texto del usuario
   final TextEditingController _usuarioController = TextEditingController();
-  
+
   /// Controlador para el campo de texto de la contraseña
   final TextEditingController _contrasenaController = TextEditingController();
-  
+
   /// Clave global para acceder y validar el formulario
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
-  
+
   /// Servicio para realizar operaciones de autenticación con la API
   final UsuarioService _usuarioService = UsuarioService();
 
   /// Indica si se está procesando la solicitud de inicio de sesión
   bool _cargando = false;
-  
+
   /// Mensaje de éxito o error para mostrar al usuario
   String _mensaje = '';
-  
+
   /// Controla si se debe mantener la sesión activa después de cerrar la app
   /// Por defecto es true para mejor experiencia de usuario
   bool _mantenerSesion = true;
-  
+
   /// Instancia de FlutterSecureStorage para almacenar datos de forma segura
   final storage = FlutterSecureStorage();
 
   /// Se ejecuta cuando el widget se inserta en el árbol de widgets
-  /// 
+  ///
   /// Verifica si hay una sesión activa guardada para realizar
   /// un inicio de sesión automático
   @override
@@ -80,16 +80,16 @@ class _LoginScreenState extends State<LoginScreen> {
     _contrasenaController.dispose();
     super.dispose();
   }
-  
+
   /// Verifica si existe una sesión activa guardada en el almacenamiento seguro
-  /// 
-  /// Si encuentra una sesión activa (el usuario marcó "Mantener sesión activa" 
+  ///
+  /// Si encuentra una sesión activa (el usuario marcó "Mantener sesión activa"
   /// en su último inicio de sesión), navega automáticamente a la pantalla principal
   /// sin requerir que el usuario vuelva a ingresar sus credenciales.
   Future<void> _verificarSesion() async {
     try {
       final sesionActiva = await storage.read(key: 'sesion_activa');
-      
+
       if (sesionActiva == 'true') {
         // Si hay una sesión activa, navegar a la pantalla principal
         Navigator.pushReplacement(
@@ -104,11 +104,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Almacena los datos del usuario en el almacenamiento seguro
-  /// 
+  ///
   /// Este método guarda la información del usuario autenticado en el
   /// almacenamiento seguro (FlutterSecureStorage) para poder acceder a ella
   /// posteriormente sin necesidad de volver a iniciar sesión.
-  /// 
+  ///
   /// Guarda los siguientes datos:
   /// - ID del usuario
   /// - Nombre de usuario
@@ -118,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// - Pantallas disponibles (si existen)
   /// - Información del empleado (si existe)
   /// - Estado de la sesión activa (según la elección del usuario)
-  /// 
+  ///
   /// @param usuario Objeto Usuario con los datos a guardar
   Future<void> _guardarDatosUsuario(Usuario usuario) async {
     try {
@@ -127,21 +127,27 @@ class _LoginScreenState extends State<LoginScreen> {
       await storage.write(key: 'usuario_nombre', value: usuario.usua_Usuario);
       await storage.write(key: 'usuario_token', value: usuario.usua_Token);
       await storage.write(key: 'usuario_rol', value: usuario.role_Nombre);
-      await storage.write(key: 'usuario_es_admin', value: usuario.usua_EsAdmin.toString());
-      
+      await storage.write(
+        key: 'usuario_es_admin',
+        value: usuario.usua_EsAdmin.toString(),
+      );
+
       // Guardar pantallas si están disponibles
       if (usuario.pantallas != null) {
         await storage.write(key: 'usuario_pantallas', value: usuario.pantallas);
       }
-      
+
       // Guardar información adicional que pueda ser útil
       if (usuario.empleado != null) {
         await storage.write(key: 'usuario_empleado', value: usuario.empleado);
       }
-      
+
       // Guardar estado de sesión activa según la elección del usuario
-      await storage.write(key: 'sesion_activa', value: _mantenerSesion ? 'true' : 'false');
-      
+      await storage.write(
+        key: 'sesion_activa',
+        value: _mantenerSesion ? 'true' : 'false',
+      );
+
       print('Datos del usuario guardados correctamente');
       print('Mantener sesión activa: $_mantenerSesion');
     } catch (e) {
@@ -151,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Maneja el proceso de inicio de sesión
-  /// 
+  ///
   /// Este método se ejecuta cuando el usuario presiona el botón de inicio de sesión.
   /// Realiza las siguientes acciones:
   /// 1. Valida que los campos del formulario no estén vacíos
@@ -166,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _iniciarSesion() async {
     // Validar el formulario
     if (!_formkey.currentState!.validate()) return;
-    
+
     // Mostrar indicador de carga y limpiar mensajes previos
     setState(() {
       _cargando = true;
@@ -183,10 +189,9 @@ class _LoginScreenState extends State<LoginScreen> {
       // Verificar si la autenticación fue exitosa
       if (usuario != null &&
           (usuario.code_Status == 1 || usuario.code_Status == null)) {
-        
         // Guardar datos del usuario en el almacenamiento seguro
         await _guardarDatosUsuario(usuario);
-        
+
         // Mostrar mensaje de éxito
         setState(() {
           _mensaje = 'Login exitoso';
@@ -217,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Construye la interfaz de usuario de la pantalla de login
-  /// 
+  ///
   /// La interfaz se compone de los siguientes elementos:
   /// 1. Un fondo con gradiente azul
   /// 2. Un logo y título en la parte superior
@@ -250,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 80),
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -268,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 50),
+                const SizedBox(height: 30),
 
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -292,11 +297,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       // permite al usuario alternar entre las pantallas de inicio de sesión
                       // y registro. Está diseñado como un contenedor con fondo gris claro
                       // que contiene dos botones (tabs).
-                      // 
+                      //
                       // El tab seleccionado (en este caso "Iniciar Sesión") se muestra con
                       // fondo azul y texto blanco. El tab no seleccionado tiene fondo
                       // transparente y texto negro.
-                      // 
+                      //
                       // IMPORTANTE: Tu compañero debe implementar un diseño similar en la
                       // pantalla de registro, pero con el tab "Registrarse" seleccionado
                       // y el tab "Iniciar Sesión" no seleccionado.
@@ -315,7 +320,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   // En la pantalla de registro, este onTap debe navegar de vuelta a LoginScreen
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   decoration: BoxDecoration(
                                     // Este tab está seleccionado, por lo que tiene fondo azul
                                     color: Colors.blue.shade700,
@@ -343,13 +350,30 @@ class _LoginScreenState extends State<LoginScreen> {
                                   // en la pantalla de registro (volver a LoginScreen)
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const RegistrarseScreen(),
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation, secondaryAnimation) =>
+                                          const RegistrarseScreen(),
+                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                        var begin = const Offset(1.0, 0.0);
+                                        var end = Offset.zero;
+                                        var curve = Curves.easeInOutQuart;
+                                        
+                                        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                                        var offsetAnimation = animation.drive(tween);
+                                        
+                                        return SlideTransition(
+                                          position: offsetAnimation,
+                                          child: child,
+                                        );
+                                      },
+                                      transitionDuration: const Duration(milliseconds: 500),
                                     ),
                                   );
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   decoration: BoxDecoration(
                                     // Este tab no está seleccionado, por lo que tiene fondo transparente
                                     color: Colors.transparent,
@@ -521,36 +545,36 @@ class _LoginScreenState extends State<LoginScreen> {
                                           _mensaje.contains('exitoso')
                                               ? Colors.green
                                               : Colors.red,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _mensaje.contains('exitoso')
-                                        ? Icons.check_circle
-                                        : Icons.error,
-                                    color:
-                                        _mensaje.contains('exitoso')
-                                            ? Colors.green
-                                            : Colors.red,
+                                    ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _mensaje,
-                                      style: TextStyle(
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _mensaje.contains('exitoso')
+                                            ? Icons.check_circle
+                                            : Icons.error,
                                         color:
                                             _mensaje.contains('exitoso')
                                                 ? Colors.green
                                                 : Colors.red,
-                                        fontWeight: FontWeight.bold,
                                       ),
-                                    ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          _mensaje,
+                                          style: TextStyle(
+                                            color:
+                                                _mensaje.contains('exitoso')
+                                                    ? Colors.green
+                                                    : Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
                           ],
                         ),
                       ),

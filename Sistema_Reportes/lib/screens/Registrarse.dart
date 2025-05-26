@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:another_flushbar/flushbar.dart';
 import '../services/usuarioService.dart';
+import '../services/estadoCivilService.dart';
+import '../services/connectivityService.dart';
+import '../models/estadoCivilViewModel.dart';
 import '../screens/login.dart';
 
 class RegistrarseScreen extends StatefulWidget {
@@ -12,11 +17,17 @@ class RegistrarseScreen extends StatefulWidget {
 class _RegistroScreenState extends State<RegistrarseScreen> {
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
   final UsuarioService _usuarioService = UsuarioService();
+  final EstadoCivilService _estadoCivilService = EstadoCivilService();
+  final ConnectivityService _connectivityService = ConnectivityService();
+
+  // Para manejar la suscripción a cambios de conectividad
+  late Stream<List<ConnectivityResult>> _connectivityStream;
 
   // Controladores para campos de usuario
   final TextEditingController _usuarioController = TextEditingController();
   final TextEditingController _contrasenaController = TextEditingController();
-  final TextEditingController _confirmarContrasenaController = TextEditingController();
+  final TextEditingController _confirmarContrasenaController =
+      TextEditingController();
 
   // Controladores para campos de persona
   final TextEditingController _dniController = TextEditingController();
@@ -29,22 +40,187 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   // Variables de estado
   bool _cargando = false;
-  String _mensaje = '';
   String _sexoSeleccionado = 'M';
-  int _estadoCivilSeleccionado = 1;
+  int? _estadoCivilSeleccionado;
+  bool _cargandoEstadosCiviles = true;
 
-  // Opciones para dropdowns
+  // Opciones para sexo (ahora como radio buttons)
   final List<Map<String, dynamic>> _opcionesSexo = [
-    {'valor': 'M', 'texto': 'Masculino'},
-    {'valor': 'F', 'texto': 'Femenino'},
+    {'valor': 'M', 'texto': 'M'},
+    {'valor': 'F', 'texto': 'F'},
   ];
 
-  final List<Map<String, dynamic>> _opcionesEstadoCivil = [
-    {'valor': 1, 'texto': 'Soltero/a'},
-    {'valor': 2, 'texto': 'Casado/a'},
-    {'valor': 3, 'texto': 'Divorciado/a'},
-    {'valor': 4, 'texto': 'Viudo/a'},
+  // Lista para almacenar los estados civiles cargados desde la API
+  List<EstadoCivil> _estadosCiviles = [];
+
+  // Estado del formulario por pasos
+  int _pasoActual = 0;
+  final int _totalPasos = 3;
+
+  List<String> _titulosPasos = [
+    'Datos Personales',
+    'Dirección y Ubicación',
+    'Datos de Usuario',
   ];
+
+  List<String> _descripcionesPasos = [
+    'Ingresa tus datos personales.',
+    'Proporciona tu dirección y código de municipio.',
+    'Elige un nombre de usuario y contraseña.',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pasoActual = 0;
+    _cargarEstadosCiviles();
+
+    // Configurar la escucha de cambios en la conectividad
+    _connectivityStream = _connectivityService.onConnectivityChanged();
+    _connectivityStream.listen(_handleConnectivityChange);
+  }
+
+  /// Maneja los cambios en la conectividad
+  void _handleConnectivityChange(List<ConnectivityResult> result) async {
+    // Si hay alguna conexión y no tenemos estados civiles cargados
+    // intentamos cargar los datos nuevamente
+    if (!result.contains(ConnectivityResult.none) &&
+        _cargandoEstadosCiviles == false &&
+        _estadosCiviles.isEmpty) {
+      // Esperamos un momento para asegurarnos de que la conexión sea estable
+      await Future.delayed(const Duration(seconds: 1));
+      // Verificamos si realmente hay conexión a internet
+      final hasConnection = await _connectivityService.hasConnection();
+      if (hasConnection) {
+        // Mostrar notificación de carga con barra de progreso
+        _mostrarCargando('Reconectando...');
+
+        // Cargar los estados civiles
+        _cargarEstadosCiviles().then((_) {
+          // Si la carga fue exitosa, mostrar una notificación de éxito
+          if (_estadosCiviles.isNotEmpty && mounted) {
+            _mostrarExito('Conexión restablecida exitosamente');
+          }
+        });
+      }
+    }
+  }
+
+  /// Carga los estados civiles desde la API
+  Future<void> _cargarEstadosCiviles() async {
+    // Verificamos primero si hay conexión a internet
+    final hasConnection = await _connectivityService.hasConnection();
+
+    setState(() {
+      _cargandoEstadosCiviles = true;
+    });
+
+    if (!hasConnection) {
+      setState(() {
+        _cargandoEstadosCiviles = false;
+      });
+
+      // Mostrar notificación de error
+      _mostrarError(
+        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+      );
+      return;
+    }
+
+    try {
+      final estadosCiviles = await _estadoCivilService.listar();
+
+      // Verificamos si el widget todavía está montado antes de actualizar el estado
+      if (mounted) {
+        setState(() {
+          _estadosCiviles = estadosCiviles;
+          // No seleccionamos ninguno por defecto, dejamos null para que se muestre "Seleccione una opción"
+          _estadoCivilSeleccionado = null;
+          _cargandoEstadosCiviles = false;
+        });
+      }
+    } catch (e) {
+      // Verificamos si el widget todavía está montado antes de actualizar el estado
+      if (mounted) {
+        setState(() {
+          _cargandoEstadosCiviles = false;
+        });
+
+        // Mostrar notificación de error
+        _mostrarError(
+          'No se pudieron cargar las opciones de estado civil. Por favor, intenta nuevamente.',
+        );
+      }
+    }
+  }
+
+  // Referencia para la Flushbar actual
+  Flushbar? _currentFlushbar;
+
+  /// Muestra una notificación en la parte superior de la pantalla
+  void _mostrarNotificacion({
+    required String mensaje,
+    required Color color,
+    required IconData icono,
+    bool mostrarProgreso = false,
+    int duracionSegundos = 3,
+  }) {
+    // Cerrar la notificación anterior si existe
+    _currentFlushbar?.dismiss();
+
+    _currentFlushbar = Flushbar(
+      message: mensaje,
+      icon: Icon(icono, size: 28.0, color: Colors.white),
+      duration: Duration(seconds: duracionSegundos),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: color,
+      borderRadius: BorderRadius.circular(8),
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(16),
+      boxShadows: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.3),
+          offset: const Offset(0, 2),
+          blurRadius: 3,
+        ),
+      ],
+      // Mostrar barra de progreso si es necesario
+      showProgressIndicator: mostrarProgreso,
+      progressIndicatorBackgroundColor: Colors.white.withOpacity(0.3),
+      progressIndicatorValueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+    )..show(context);
+  }
+
+  /// Muestra una notificación de error
+  void _mostrarError(String mensaje) {
+    _mostrarNotificacion(
+      mensaje: mensaje,
+      color: Colors.red.shade700,
+      icono: Icons.error_outline,
+      duracionSegundos: 4,
+    );
+  }
+
+  /// Muestra una notificación de éxito
+  void _mostrarExito(String mensaje) {
+    _mostrarNotificacion(
+      mensaje: mensaje,
+      color: Colors.green.shade700,
+      icono: Icons.check_circle_outline,
+      duracionSegundos: 3,
+    );
+  }
+
+  /// Muestra una notificación de carga con barra de progreso
+  void _mostrarCargando(String mensaje) {
+    _mostrarNotificacion(
+      mensaje: mensaje,
+      color: Colors.blue.shade700,
+      icono: Icons.info_outline,
+      mostrarProgreso: true,
+      duracionSegundos: 30, // Tiempo largo por defecto, se cerrará manualmente
+    );
+  }
 
   @override
   void dispose() {
@@ -58,35 +234,49 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     _correoController.dispose();
     _direccionController.dispose();
     _municipioController.dispose();
+    // Cerrar cualquier notificación pendiente
+    _currentFlushbar?.dismiss();
     super.dispose();
   }
 
   Future<void> _registrarUsuario() async {
-    if (!_formkey.currentState!.validate()) {
+    if (!_formkey.currentState!.validate()) return;
+
+    if (_contrasenaController.text != _confirmarContrasenaController.text) {
+      _mostrarError('Las contraseñas no coinciden.');
       return;
     }
 
-    // Validar confirmación de contraseña
-    if (_contrasenaController.text != _confirmarContrasenaController.text) {
-      setState(() {
-        _mensaje = 'Las contraseñas no coinciden.';
-      });
+    // Verificar conectividad antes de realizar la solicitud
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      _mostrarError(
+        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+      );
       return;
     }
 
     setState(() {
       _cargando = true;
-      _mensaje = '';
     });
+
+    // Verificamos que el estado civil esté seleccionado
+    if (_estadoCivilSeleccionado == null) {
+      setState(() {
+        _cargando = false;
+      });
+      _mostrarError('Por favor, seleccione un estado civil.');
+      return;
+    }
+
+    // Mostrar notificación de carga con barra de progreso
+    _mostrarCargando('Procesando registro...');
 
     try {
       final resultado = await _usuarioService.registro(
-        // Datos de usuario
         usuario: _usuarioController.text.trim(),
         contrasena: _contrasenaController.text,
         usuaCreacion: 1,
-        
-        // Datos de persona
         dni: _dniController.text.trim(),
         nombre: _nombreController.text.trim(),
         apellido: _apellidoController.text.trim(),
@@ -95,32 +285,443 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         correo: _correoController.text.trim(),
         direccion: _direccionController.text.trim(),
         municipioCodigo: _municipioController.text.trim(),
-        estadoCivilId: _estadoCivilSeleccionado,
+        estadoCivilId: _estadoCivilSeleccionado!,
       );
 
-      setState(() {
-        _mensaje = resultado['message_Status'] ?? 'Respuesta desconocida';
-      });
-
-      // Si el registro fue exitoso, navegar al login después de 2 segundos
       if (resultado['success'] == true) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
-        }
+        // Cerrar cualquier notificación anterior para evitar conflictos
+        _currentFlushbar?.dismiss();
+        
+        // Mostrar mensaje de éxito sin usar Flushbar para evitar conflictos con la navegación
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(resultado['message_Status'] ?? '¡Registro exitoso!'),
+            backgroundColor: Colors.green.shade700,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+
+        // Esperar un momento breve y luego navegar
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              PageRouteBuilder(
+                pageBuilder:
+                    (context, animation, secondaryAnimation) =>
+                        const LoginScreen(),
+                transitionsBuilder: (
+                  context,
+                  animation,
+                  secondaryAnimation,
+                  child,
+                ) {
+                  var begin = const Offset(-1.0, 0.0); // Desde la izquierda
+                  var end = Offset.zero;
+                  var curve = Curves.easeInOutQuart;
+
+                  var tween = Tween(
+                    begin: begin,
+                    end: end,
+                  ).chain(CurveTween(curve: curve));
+                  var offsetAnimation = animation.drive(tween);
+
+                  return SlideTransition(position: offsetAnimation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 500),
+              ),
+            );
+          }
+        });
+      } else {
+        // Mostrar mensaje de error
+        _mostrarError(
+          resultado['message_Status'] ?? 'No se pudo completar el registro.',
+        );
       }
     } catch (e) {
-      setState(() {
-        _mensaje = 'Error: ${e.toString()}';
-      });
+      _mostrarError(
+        'No se pudo completar el registro. Por favor, verifica tu conexión e intenta nuevamente.',
+      );
     } finally {
       setState(() {
         _cargando = false;
       });
     }
+  }
+
+  void _pasoAnterior() {
+    if (_pasoActual > 0) {
+      setState(() {
+        _pasoActual--;
+      });
+    }
+  }
+
+  void _siguientePaso() {
+    if (!_formkey.currentState!.validate()) return;
+
+    if (_pasoActual < _totalPasos - 1) {
+      setState(() {
+        _pasoActual++;
+      });
+    } else {
+      _registrarUsuario(); // último paso
+    }
+  }
+
+  Widget _construirContenidoPaso() {
+    switch (_pasoActual) {
+      case 0:
+        return _construirPasoDatosPersonales();
+      case 1:
+        return _construirPasoDireccionMunicipio();
+      case 2:
+        return _construirPasoDatosUsuario();
+      default:
+        return const Text('Error');
+    }
+  }
+
+  Widget _construirPasoDatosPersonales() {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // DNI
+        TextFormField(
+          controller: _dniController,
+          keyboardType: TextInputType.text,
+          onChanged: (_) {
+            _formkey.currentState!.validate(); // Vuelve a validar el campo
+          },
+          decoration: InputDecoration(
+            labelText: 'DNI / Identidad',
+            hintText: 'Ej: 0801199812345',
+            prefixIcon: const Icon(Icons.credit_card),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+
+          validator: (value) {
+            if (value == null || value.isEmpty) return 'El DNI es requerido.';
+            if (value.length < 13)
+              return 'El DNI debe tener al menos 13 caracteres.';
+            return null;
+          },
+        ),
+        const SizedBox(height: 15),
+
+        // Nombre
+        TextFormField(
+          controller: _nombreController,
+          onChanged: (_) {
+            _formkey.currentState!.validate(); // Vuelve a validar el campo
+          },
+          decoration: InputDecoration(
+            labelText: 'Nombre',
+            hintText: 'Tu nombre',
+            prefixIcon: const Icon(Icons.person),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator:
+              (value) => value?.isEmpty ?? true ? 'Nombre requerido' : null,
+        ),
+        const SizedBox(height: 15),
+
+        // Apellido
+        TextFormField(
+          controller: _apellidoController,
+          onChanged: (_) {
+            _formkey.currentState!.validate(); // Vuelve a validar el campo
+          },
+          decoration: InputDecoration(
+            labelText: 'Apellido',
+            hintText: 'Tu apellido',
+            prefixIcon: const Icon(Icons.person_outline),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator:
+              (value) => value?.isEmpty ?? true ? 'Apellido requerido' : null,
+        ),
+        const SizedBox(height: 15),
+
+        // Sexo (Radio Buttons en fila)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+              child: Text('Sexo', style: TextStyle(fontSize: 16)),
+            ),
+            Row(
+              children:
+                  _opcionesSexo.map((opcion) {
+                    return Expanded(
+                      child: RadioListTile<String>(
+                        title: Text(opcion['texto']),
+                        value: opcion['valor'],
+                        groupValue: _sexoSeleccionado,
+                        onChanged: (valor) {
+                          setState(() {
+                            _sexoSeleccionado = valor!;
+                          });
+                        },
+                        dense: true,
+                      ),
+                    );
+                  }).toList(),
+            ),
+          ],
+        ),
+        const SizedBox(
+          height: 5,
+        ), // Espacio reducido ya que los radio buttons ocupan más espacio
+        const SizedBox(height: 15),
+
+        // Estado Civil
+        _cargandoEstadosCiviles
+            ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
+            : DropdownButtonFormField<int?>(
+              value: _estadoCivilSeleccionado,
+              decoration: InputDecoration(
+                labelText: 'Estado Civil',
+                prefixIcon: const Icon(Icons.favorite),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: primaryColor, width: 2),
+                ),
+              ),
+              hint: const Text('Seleccione una opción'),
+              items: [
+                // Opción por defecto
+                const DropdownMenuItem<int?>(
+                  value: 0,
+                  child: Text('Seleccione una opción'),
+                ),
+                // Resto de opciones de estados civiles
+                ..._estadosCiviles.map((estadoCivil) {
+                  return DropdownMenuItem<int?>(
+                    value: estadoCivil.esCi_Id,
+                    child: Text(estadoCivil.esCi_Nombre),
+                  );
+                }).toList(),
+              ],
+              validator: (value) {
+                if (value == null) {
+                  return 'Por favor seleccione un estado civil';
+                }
+                return null;
+              },
+              onChanged: (valor) {
+                setState(() {
+                  _estadoCivilSeleccionado = valor;
+                });
+                _formkey.currentState!.validate();
+              },
+            ),
+        const SizedBox(height: 15),
+
+        // Teléfono
+        TextFormField(
+          controller: _telefonoController,
+          keyboardType: TextInputType.phone,
+          onChanged: (_) {
+            _formkey.currentState!.validate(); // Vuelve a validar el campo
+          },
+          decoration: InputDecoration(
+            labelText: 'Teléfono',
+            hintText: 'Ej: 98765432',
+            prefixIcon: const Icon(Icons.phone),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'El teléfono es requerido.';
+            if (value.length < 8)
+              return 'Teléfono debe tener al menos 8 dígitos.';
+            return null;
+          },
+        ),
+        const SizedBox(height: 15),
+
+        // Correo
+        TextFormField(
+          controller: _correoController,
+          keyboardType: TextInputType.emailAddress,
+          onChanged: (_) {
+            _formkey.currentState!.validate(); // Vuelve a validar el campo
+          },
+          decoration: InputDecoration(
+            labelText: 'Correo Electrónico',
+            hintText: 'ejemplo@correo.com',
+            prefixIcon: const Icon(Icons.email),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'El correo es requerido.';
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value))
+              return 'Correo inválido.';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _construirPasoDireccionMunicipio() {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Dirección
+        TextFormField(
+          controller: _direccionController,
+          maxLines: 2,
+          decoration: InputDecoration(
+            labelText: 'Dirección',
+            hintText: 'Tu dirección completa',
+            prefixIcon: const Icon(Icons.home),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator:
+              (value) =>
+                  value?.isEmpty ?? true ? 'La dirección es requerida.' : null,
+        ),
+        const SizedBox(height: 15),
+        // Municipio
+        TextFormField(
+          controller: _municipioController,
+          decoration: InputDecoration(
+            labelText: 'Código de Municipio',
+            hintText: 'Ej: 0801',
+            prefixIcon: const Icon(Icons.location_city),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'El código de municipio es requerido.';
+            if (value.length != 4) return 'El código debe tener 4 dígitos.';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _construirPasoDatosUsuario() {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Usuario
+        TextFormField(
+          controller: _usuarioController,
+          decoration: InputDecoration(
+            labelText: 'Nombre de Usuario',
+            hintText: 'Ej: usuario123',
+            prefixIcon: const Icon(Icons.account_circle),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'El usuario es requerido.';
+            if (value.length < 3)
+              return 'El usuario debe tener al menos 3 caracteres.';
+            return null;
+          },
+        ),
+        const SizedBox(height: 15),
+        // Contraseña
+        TextFormField(
+          controller: _contrasenaController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'Contraseña',
+            hintText: 'Mínimo 6 caracteres',
+            prefixIcon: const Icon(Icons.lock),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'La contraseña es requerida.';
+            if (value.length < 6)
+              return 'La contraseña debe tener al menos 6 caracteres.';
+            return null;
+          },
+        ),
+        const SizedBox(height: 15),
+        // Confirmar Contraseña
+        TextFormField(
+          controller: _confirmarContrasenaController,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'Confirmar Contraseña',
+            hintText: 'Repite tu contraseña',
+            prefixIcon: const Icon(Icons.lock_outline),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty)
+              return 'Debe confirmar la contraseña.';
+            if (value != _contrasenaController.text)
+              return 'Las contraseñas no coinciden.';
+            return null;
+          },
+        ),
+      ],
+    );
   }
 
   @override
@@ -144,7 +745,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         ),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 50),
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -163,7 +764,6 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -192,13 +792,49 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                                 onTap: () {
                                   Navigator.pushReplacement(
                                     context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const LoginScreen(),
+                                    PageRouteBuilder(
+                                      pageBuilder:
+                                          (
+                                            context,
+                                            animation,
+                                            secondaryAnimation,
+                                          ) => const LoginScreen(),
+                                      transitionsBuilder: (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        var begin = const Offset(
+                                          -1.0,
+                                          0.0,
+                                        ); // Desde la izquierda
+                                        var end = Offset.zero;
+                                        var curve = Curves.easeInOutQuart;
+
+                                        var tween = Tween(
+                                          begin: begin,
+                                          end: end,
+                                        ).chain(CurveTween(curve: curve));
+                                        var offsetAnimation = animation.drive(
+                                          tween,
+                                        );
+
+                                        return SlideTransition(
+                                          position: offsetAnimation,
+                                          child: child,
+                                        );
+                                      },
+                                      transitionDuration: const Duration(
+                                        milliseconds: 500,
+                                      ),
                                     ),
                                   );
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.transparent,
                                     borderRadius: BorderRadius.circular(10),
@@ -217,7 +853,9 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                             ),
                             Expanded(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade700,
                                   borderRadius: BorderRadius.circular(10),
@@ -237,481 +875,118 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
-
+                      // Indicador de progreso
+                      Row(
+                        children: List.generate(
+                          _totalPasos,
+                          (index) => Expanded(
+                            child: Container(
+                              height: 5,
+                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                              decoration: BoxDecoration(
+                                color:
+                                    index <= _pasoActual
+                                        ? Colors.blue.shade700
+                                        : Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Título y descripción del paso actual
+                      Text(
+                        _titulosPasos[_pasoActual],
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _descripcionesPasos[_pasoActual],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                       Form(
                         key: _formkey,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Crear Cuenta',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // SECCIÓN: DATOS PERSONALES
-                            Container(
-                              padding: const EdgeInsets.all(15),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.blue.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Datos Personales',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  
-                                  // DNI
-                                  TextFormField(
-                                    controller: _dniController,
-                                    keyboardType: TextInputType.text,
-                                    decoration: InputDecoration(
-                                      labelText: 'DNI / Identidad',
-                                      hintText: 'Ej: 0801199812345',
-                                      prefixIcon: const Icon(Icons.credit_card),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'El DNI es requerido.';
-                                      }
-                                      if (value.length < 13) {
-                                        return 'El DNI debe tener al menos 13 caracteres.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Nombre y Apellido en fila
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextFormField(
-                                          controller: _nombreController,
-                                          decoration: InputDecoration(
-                                            labelText: 'Nombre',
-                                            hintText: 'Tu nombre',
-                                            prefixIcon: const Icon(Icons.person),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                              borderSide: BorderSide(color: primaryColor, width: 2),
-                                            ),
-                                          ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Nombre requerido';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: TextFormField(
-                                          controller: _apellidoController,
-                                          decoration: InputDecoration(
-                                            labelText: 'Apellido',
-                                            hintText: 'Tu apellido',
-                                            prefixIcon: const Icon(Icons.person_outline),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                              borderSide: BorderSide(color: primaryColor, width: 2),
-                                            ),
-                                          ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Apellido requerido';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Sexo y Estado Civil en fila
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: DropdownButtonFormField<String>(
-                                          value: _sexoSeleccionado,
-                                          decoration: InputDecoration(
-                                            labelText: 'Sexo',
-                                            prefixIcon: const Icon(Icons.wc),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                              borderSide: BorderSide(color: primaryColor, width: 2),
-                                            ),
-                                          ),
-                                          items: _opcionesSexo.map((opcion) {
-                                            return DropdownMenuItem<String>(
-                                              value: opcion['valor'],
-                                              child: Text(opcion['texto']),
-                                            );
-                                          }).toList(),
-                                          onChanged: (valor) {
-                                            setState(() {
-                                              _sexoSeleccionado = valor!;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          value: _estadoCivilSeleccionado,
-                                          decoration: InputDecoration(
-                                            labelText: 'Estado Civil',
-                                            prefixIcon: const Icon(Icons.favorite),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(10),
-                                              borderSide: BorderSide(color: primaryColor, width: 2),
-                                            ),
-                                          ),
-                                          items: _opcionesEstadoCivil.map((opcion) {
-                                            return DropdownMenuItem<int>(
-                                              value: opcion['valor'],
-                                              child: Text(opcion['texto']),
-                                            );
-                                          }).toList(),
-                                          onChanged: (valor) {
-                                            setState(() {
-                                              _estadoCivilSeleccionado = valor!;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Teléfono
-                                  TextFormField(
-                                    controller: _telefonoController,
-                                    keyboardType: TextInputType.phone,
-                                    decoration: InputDecoration(
-                                      labelText: 'Teléfono',
-                                      hintText: 'Ej: 98765432',
-                                      prefixIcon: const Icon(Icons.phone),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'El teléfono es requerido.';
-                                      }
-                                      if (value.length < 8) {
-                                        return 'Teléfono debe tener al menos 8 dígitos.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Correo
-                                  TextFormField(
-                                    controller: _correoController,
-                                    keyboardType: TextInputType.emailAddress,
-                                    decoration: InputDecoration(
-                                      labelText: 'Correo Electrónico',
-                                      hintText: 'ejemplo@correo.com',
-                                      prefixIcon: const Icon(Icons.email),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'El correo es requerido.';
-                                      }
-                                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                                        return 'Ingrese un correo válido.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Dirección
-                                  TextFormField(
-                                    controller: _direccionController,
-                                    maxLines: 2,
-                                    decoration: InputDecoration(
-                                      labelText: 'Dirección',
-                                      hintText: 'Tu dirección completa',
-                                      prefixIcon: const Icon(Icons.home),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'La dirección es requerida.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Municipio
-                                  TextFormField(
-                                    controller: _municipioController,
-                                    decoration: InputDecoration(
-                                      labelText: 'Código de Municipio',
-                                      hintText: 'Ej: 0801',
-                                      prefixIcon: const Icon(Icons.location_city),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'El código de municipio es requerido.';
-                                      }
-                                      if (value.length != 4) {
-                                        return 'El código debe tener 4 dígitos.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // SECCIÓN: DATOS DE USUARIO
-                            Container(
-                              padding: const EdgeInsets.all(15),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.green.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Datos de Usuario',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Usuario
-                                  TextFormField(
-                                    controller: _usuarioController,
-                                    decoration: InputDecoration(
-                                      labelText: 'Nombre de Usuario',
-                                      hintText: 'Ej: usuario123',
-                                      prefixIcon: const Icon(Icons.account_circle),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'El usuario es requerido.';
-                                      }
-                                      if (value.length < 3) {
-                                        return 'El usuario debe tener al menos 3 caracteres.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Contraseña
-                                  TextFormField(
-                                    controller: _contrasenaController,
-                                    obscureText: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Contraseña',
-                                      hintText: 'Mínimo 6 caracteres',
-                                      prefixIcon: const Icon(Icons.lock),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'La contraseña es requerida.';
-                                      }
-                                      if (value.length < 6) {
-                                        return 'La contraseña debe tener al menos 6 caracteres.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 15),
-
-                                  // Confirmar Contraseña
-                                  TextFormField(
-                                    controller: _confirmarContrasenaController,
-                                    obscureText: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Confirmar Contraseña',
-                                      hintText: 'Repite tu contraseña',
-                                      prefixIcon: const Icon(Icons.lock_outline),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: primaryColor, width: 2),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Debe confirmar la contraseña.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
+                            _construirContenidoPaso(),
                             const SizedBox(height: 25),
-
-                            // Botón de registro
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: _cargando ? null : _registrarUsuario,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade700,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  elevation: 5,
-                                ),
-                                child: _cargando
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'REGISTRARSE',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                            // Botones de navegación
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (_pasoActual > 0)
+                                  ElevatedButton.icon(
+                                    onPressed: _pasoAnterior,
+                                    icon: const Icon(Icons.arrow_back),
+                                    label: const Text('Anterior'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.grey.shade600,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 15,
+                                        vertical: 12,
                                       ),
-                              ),
-                            ),
-
-                            // Área de mensajes
-                            if (_mensaje.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 20),
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: _mensaje.contains('correctamente') || _mensaje.contains('registrado')
-                                        ? Colors.green.withOpacity(0.1)
-                                        : Colors.red.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _mensaje.contains('correctamente') || _mensaje.contains('registrado')
-                                          ? Colors.green
-                                          : Colors.red,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  const SizedBox(width: 120),
+                                ElevatedButton.icon(
+                                  onPressed: _cargando ? null : _siguientePaso,
+                                  icon:
+                                      _cargando
+                                          ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                          : Icon(
+                                            _pasoActual < _totalPasos - 1
+                                                ? Icons.arrow_forward
+                                                : Icons.check,
+                                          ),
+                                  label: Text(
+                                    _pasoActual < _totalPasos - 1
+                                        ? 'Siguiente'
+                                        : 'Registrarse',
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        _pasoActual < _totalPasos - 1
+                                            ? Colors.blue.shade700
+                                            : Colors.green.shade700,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 15,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        _mensaje.contains('correctamente') || _mensaje.contains('registrado')
-                                            ? Icons.check_circle
-                                            : Icons.error,
-                                        color: _mensaje.contains('correctamente') || _mensaje.contains('registrado')
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          _mensaje,
-                                          style: TextStyle(
-                                            color: _mensaje.contains('correctamente') || _mensaje.contains('registrado')
-                                                ? Colors.green
-                                                : Colors.red,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                                 ),
-                              ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
+                      // Espacio adicional al final
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
