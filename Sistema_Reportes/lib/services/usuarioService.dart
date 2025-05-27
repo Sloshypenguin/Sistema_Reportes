@@ -189,6 +189,72 @@ class UsuarioService {
     }
   }
 
+  /// Actualiza la información del usuario
+  /// 
+  /// Permite actualizar el nombre de usuario y correo electrónico.
+  /// Retorna un mapa con el resultado de la operación:
+  /// - success: indica si la operación fue exitosa
+  /// - message: mensaje descriptivo del resultado
+  /// - codeStatus: código de estado (1 = éxito, -1 = advertencia, 0 = error)
+  /// - messageStatus: mensaje detallado del estado
+  Future<Map<String, dynamic>> actualizarUsuario({
+    required int usuarioId,
+    required String usuario,
+    required int persId,
+    required int roleId,
+    required bool esAdmin,
+    required int usuarioModificacion,
+    required bool esEmpleado,
+    required String correo,
+  }) async {
+    // Verificar conectividad con doble verificación para mayor robustez
+    bool hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      // Segundo intento después de una breve pausa
+      await Future.delayed(const Duration(milliseconds: 500));
+      hasConnection = await _connectivityService.hasConnection();
+      
+      if (!hasConnection) {
+        throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+      }
+    }
+    
+    // Obtener fecha actual en formato ISO
+    final fechaActual = DateTime.now().toUtc().toIso8601String();
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Actualizar');
+    final response = await http.put(
+      url,
+      headers: ApiConfig.headers,
+      body: jsonEncode({
+        'usua_Id': usuarioId,
+        'usua_Usuario': usuario,
+        'pers_Id': persId,
+        'role_Id': roleId,
+        'usua_EsAdmin': esAdmin,
+        'usua_Modificacion': usuarioModificacion,
+        'usua_FechaModificacion': fechaActual,
+        'usua_EsEmpleado': esEmpleado,
+        'pers_Correo': correo,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      final codeStatus = jsonMap['data']?['code_Status'] ?? 0;
+      final messageStatus = jsonMap['data']?['message_Status'] ?? '';
+      
+      return {
+        'success': jsonMap['success'] ?? false,
+        'message': jsonMap['message'] ?? 'Error al actualizar usuario',
+        'codeStatus': codeStatus,
+        'messageStatus': messageStatus,
+      };
+    } else {
+      throw Exception('No se pudo actualizar la información. Por favor, intenta nuevamente.');
+    }
+  }
+
   /// Registra un nuevo usuario en el sistema con datos de persona
   Future<Map<String, dynamic>> registro({
     required String usuario,
