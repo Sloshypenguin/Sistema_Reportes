@@ -3,8 +3,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:another_flushbar/flushbar.dart';
 import '../services/usuarioService.dart';
 import '../services/estadoCivilService.dart';
+import '../services/departamentoService.dart';
+import '../services/municipioService.dart';
 import '../services/connectivityService.dart';
 import '../models/estadoCivilViewModel.dart';
+import '../models/departamentoViewModel.dart';
+import '../models/municipioViewModel.dart';
 import '../screens/login.dart';
 
 class RegistrarseScreen extends StatefulWidget {
@@ -14,11 +18,24 @@ class RegistrarseScreen extends StatefulWidget {
   State<RegistrarseScreen> createState() => _RegistroScreenState();
 }
 
+
 class _RegistroScreenState extends State<RegistrarseScreen> {
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
   final UsuarioService _usuarioService = UsuarioService();
   final EstadoCivilService _estadoCivilService = EstadoCivilService();
   final ConnectivityService _connectivityService = ConnectivityService();
+  final DepartamentoService _departamentoService = DepartamentoService();
+  final MunicipioService _municipioService = MunicipioService();
+
+List<Departamento> _departamentos = [];
+int? _departamentoSeleccionado;
+bool _cargandoDepartamentos = true;
+
+List<Municipio> _municipios = [];
+String? _municipioSeleccionado;
+bool _cargandoMunicipios = false;
+
+
 
   // Para manejar la suscripción a cambios de conectividad
   late Stream<ConnectivityResult> _connectivityStream;
@@ -69,11 +86,14 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     'Elige un nombre de usuario y contraseña.',
   ];
 
+
+
   @override
   void initState() {
     super.initState();
     _pasoActual = 0;
     _cargarEstadosCiviles();
+    _cargarDepartamentos();
 
     // Configurar la escucha de cambios en la conectividad
     _connectivityStream = _connectivityService.onConnectivityChanged;
@@ -151,6 +171,66 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       }
     }
   }
+
+Future<void> _cargarDepartamentos() async {
+  final hasConnection = await _connectivityService.hasConnection();
+
+  setState(() {
+    _cargandoDepartamentos = true;
+  });
+
+  if (!hasConnection) {
+    setState(() {
+      _cargandoDepartamentos = false;
+    });
+    _mostrarError('No hay conexión a internet para cargar departamentos.');
+    return;
+  }
+
+  try {
+    final departamentos = await _departamentoService.listar();
+
+    if (mounted) {
+      setState(() {
+        _departamentos = departamentos;
+        _departamentoSeleccionado = null;
+        _cargandoDepartamentos = false;
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() {
+        _cargandoDepartamentos = false;
+      });
+      _mostrarError('No se pudieron cargar los departamentos.');
+    }
+  }
+}
+
+Future<void> _cargarMunicipiosPorDepartamento() async {
+  if (_departamentoSeleccionado == null) return;
+
+  setState(() {
+    _cargandoMunicipios = true;
+  });
+
+  try {
+    final municipios = await _municipioService
+        .listarPorDepartamento(_departamentoSeleccionado!.toString().padLeft(2, '0'));
+
+    setState(() {
+      _municipios = municipios;
+      _cargandoMunicipios = false;
+    });
+  } catch (e) {
+    setState(() {
+      _cargandoMunicipios = false;
+    });
+    _mostrarError("Error al cargar municipios para el departamento seleccionado.");
+  }
+}
+
+
 
   // Referencia para la Flushbar actual
   Flushbar? _currentFlushbar;
@@ -320,7 +400,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         telefono: _telefonoController.text.trim(),
         correo: _correoController.text.trim(),
         direccion: _direccionController.text.trim(),
-        municipioCodigo: _municipioController.text.trim(),
+        municipioCodigo: _municipioSeleccionado ?? '',
         estadoCivilId: _estadoCivilSeleccionado!,
       );
 
@@ -654,53 +734,128 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   }
 
   Widget _construirPasoDireccionMunicipio() {
-    final primaryColor = Theme.of(context).colorScheme.primary;
+  final primaryColor = Theme.of(context).colorScheme.primary;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Dirección
-        TextFormField(
-          controller: _direccionController,
-          maxLines: 2,
-          decoration: InputDecoration(
-            labelText: 'Dirección',
-            hintText: 'Tu dirección completa',
-            prefixIcon: const Icon(Icons.home),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: primaryColor, width: 2),
-            ),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Dirección
+      TextFormField(
+        controller: _direccionController,
+        maxLines: 2,
+        decoration: InputDecoration(
+          labelText: 'Dirección',
+          hintText: 'Tu dirección completa',
+          prefixIcon: const Icon(Icons.home),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: primaryColor, width: 2),
           ),
-          validator:
-              (value) =>
-                  value?.isEmpty ?? true ? 'La dirección es requerida.' : null,
         ),
-        const SizedBox(height: 15),
-        // Municipio
-        TextFormField(
-          controller: _municipioController,
-          decoration: InputDecoration(
-            labelText: 'Código de Municipio',
-            hintText: 'Ej: 0801',
-            prefixIcon: const Icon(Icons.location_city),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: primaryColor, width: 2),
-            ),
+        validator: (value) =>
+            value?.isEmpty ?? true ? 'La dirección es requerida.' : null,
+      ),
+      const SizedBox(height: 15),
+
+      // Departamento
+_cargandoDepartamentos
+    ? const Center(child: CircularProgressIndicator())
+    : DropdownButtonFormField<int?>(
+        value: _departamentoSeleccionado,
+        decoration: InputDecoration(
+          labelText: 'Departamento',
+          prefixIcon: const Icon(Icons.map),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: primaryColor, width: 2),
           ),
-          validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'El código de municipio es requerido.';
-            if (value.length != 4) return 'El código debe tener 4 dígitos.';
-            return null;
-          },
         ),
-      ],
-    );
-  }
+        hint: const Text('Seleccione un Depto.'),
+        items: [
+          const DropdownMenuItem<int?>(
+            value: null,
+            child: Text('Seleccione un Depto.'),
+          ),
+          ..._departamentos.map((depa) {
+            return DropdownMenuItem<int?>(
+              value: int.tryParse(depa.depa_Codigo),
+              child: Text(depa.depa_Nombre,   overflow: TextOverflow.ellipsis,),
+              
+            );
+          }).toList(),
+        ],
+        onChanged: (value) {
+          setState(() {
+            _departamentoSeleccionado = value;
+            _municipioSeleccionado = null;
+            _municipios = [];
+            _cargarMunicipiosPorDepartamento();
+          });
+        },
+        validator: (value) {
+          if (value == null) return 'Seleccione un Depto.';
+          return null;
+        },
+      ),
+
+const SizedBox(height: 15),
+
+// Municipio
+_cargandoMunicipios
+    ? const Center(child: CircularProgressIndicator())
+    : DropdownButtonFormField<String?>(
+        value: _municipioSeleccionado,
+        decoration: InputDecoration(
+          labelText: 'Municipio',
+          prefixIcon: const Icon(Icons.location_city),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: primaryColor, width: 2),
+          ),
+        ),
+        hint: const Text('Seleccione un municipio'),
+        items: _municipios.isEmpty
+            ? [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('No se encontraron Mpios.'),
+                )
+              ]
+            : [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Seleccione un municipio'),
+                ),
+                ..._municipios.map((muni) {
+                  return DropdownMenuItem<String?>(
+                    value: muni.muni_Codigo,
+                    child: Text(muni.muni_Nombre, overflow: TextOverflow.ellipsis,),
+                  );
+                }).toList()
+              ],
+        onChanged: _municipios.isEmpty
+            ? null
+            : (value) {
+                setState(() {
+                  _municipioSeleccionado = value;
+                });
+              },
+        validator: (value) {
+          if (_municipios.isEmpty) return null;
+          if (value == null) return 'Seleccione un municipio';
+          return null;
+        },
+      ),
+
+
+      
+    ],
+  );
+}
+
 
   Widget _construirPasoDatosUsuario() {
     final primaryColor = Theme.of(context).colorScheme.primary;
