@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Se ejecuta cuando el widget se inserta en el árbol de widgets
   ///
-  /// Verifica si hay una sesión activa guardada para realizar
+  /// Verifica si hay una sesión activa guardada pa ra realizar
   /// un inicio de sesión automático. Utilizamos addPostFrameCallback para
   /// asegurar que la navegación no ocurra durante el ciclo de construcción inicial.
   @override
@@ -135,6 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// - Pantallas disponibles (si existen)
   /// - Información del empleado (si existe)
   /// - Estado de la sesión activa (según la elección del usuario)
+  /// - Datos adicionales necesarios para operaciones como actualización de perfil
   ///
   /// @param usuario Objeto Usuario con los datos a guardar
   Future<void> _guardarDatosUsuario(Usuario usuario) async {
@@ -148,6 +149,26 @@ class _LoginScreenState extends State<LoginScreen> {
         key: 'usuario_es_admin',
         value: usuario.usua_EsAdmin.toString(),
       );
+
+      // Guardar IDs importantes para operaciones de actualización
+      await storage.write(key: 'pers_id', value: usuario.pers_Id.toString());
+      await storage.write(key: 'role_id', value: usuario.role_Id.toString());
+
+      // Guardar correo electrónico
+      if (usuario.pers_Correo != null) {
+        await storage.write(key: 'usuario_correo', value: usuario.pers_Correo);
+      }
+
+      // Guardar estado de empleado
+      await storage.write(
+        key: 'usuario_es_empleado',
+        value: usuario.usua_EsEmpleado.toString(),
+      );
+
+      // Guardar nombre de empleado si existe
+      if (usuario.empleado != null) {
+        await storage.write(key: 'usuario_empleado', value: usuario.empleado);
+      }
 
       // Guardar pantallas si están disponibles
       if (usuario.pantallas != null) {
