@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:another_flushbar/flushbar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
 import '../services/usuarioService.dart';
 import '../services/estadoCivilService.dart';
 import '../services/departamentoService.dart';
@@ -11,13 +14,21 @@ import '../models/departamentoViewModel.dart';
 import '../models/municipioViewModel.dart';
 import '../screens/login.dart';
 
+// Claves para SharedPreferences
+const String kEstadosCivilesKey = 'estados_civiles_cache';
+const String kDepartamentosKey = 'departamentos_cache';
+const String kCacheExpiryKey = 'cache_expiry_timestamp';
+const String kMunicipiosPrefixKey = 'municipios_';
+
+// Tiempo de expiración de la caché (24 horas en milisegundos)
+const int kCacheExpiryDuration = 24 * 60 * 60 * 1000; // 24 horas
+
 class RegistrarseScreen extends StatefulWidget {
   const RegistrarseScreen({super.key});
 
   @override
   State<RegistrarseScreen> createState() => _RegistroScreenState();
 }
-
 
 class _RegistroScreenState extends State<RegistrarseScreen> {
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
@@ -27,15 +38,13 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   final DepartamentoService _departamentoService = DepartamentoService();
   final MunicipioService _municipioService = MunicipioService();
 
-List<Departamento> _departamentos = [];
-int? _departamentoSeleccionado;
-bool _cargandoDepartamentos = true;
+  List<Departamento> _departamentos = [];
+  int? _departamentoSeleccionado;
+  bool _cargandoDepartamentos = true;
 
-List<Municipio> _municipios = [];
-String? _municipioSeleccionado;
-bool _cargandoMunicipios = false;
-
-
+  List<Municipio> _municipios = [];
+  String? _municipioSeleccionado;
+  bool _cargandoMunicipios = false;
 
   // Para manejar la suscripción a cambios de conectividad
   late Stream<ConnectivityResult> _connectivityStream;
@@ -86,8 +95,6 @@ bool _cargandoMunicipios = false;
     'Elige un nombre de usuario y contraseña.',
   ];
 
-
-
   @override
   void initState() {
     super.initState();
@@ -124,38 +131,61 @@ bool _cargandoMunicipios = false;
     }
   }
 
-  /// Carga los estados civiles desde la API
+  /// Carga los estados civiles desde la caché local o API
   Future<void> _cargarEstadosCiviles() async {
-    // Verificamos primero si hay conexión a internet
-    final hasConnection = await _connectivityService.hasConnection();
-
     setState(() {
       _cargandoEstadosCiviles = true;
     });
+
+    // Intentar cargar desde la caché primero
+    final estadosCivilesCached = await _cargarEstadosCivilesDesdeCache();
+    if (estadosCivilesCached.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _estadosCiviles = estadosCivilesCached;
+          _estadoCivilSeleccionado =
+              null; // No seleccionamos ninguno por defecto
+          _cargandoEstadosCiviles = false;
+        });
+        debugPrint(
+          'Estados civiles cargados desde caché: ${estadosCivilesCached.length}',
+        );
+      }
+      return;
+    }
+
+    // Verificamos si hay conexión a internet para cargar desde la API
+    final hasConnection = await _connectivityService.hasConnection();
 
     if (!hasConnection) {
       setState(() {
         _cargandoEstadosCiviles = false;
       });
 
-      // Mostrar notificación de error
+      // Mostrar notificación de error amigable
       _mostrarError(
-        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+        'No hay conexión a internet. Por favor verifique su conexión e intente nuevamente.',
       );
       return;
     }
 
     try {
+      // Cargar desde la API
       final estadosCiviles = await _estadoCivilService.listar();
+
+      // Guardar en caché para uso futuro
+      await _guardarEstadosCivilesEnCache(estadosCiviles);
 
       // Verificamos si el widget todavía está montado antes de actualizar el estado
       if (mounted) {
         setState(() {
           _estadosCiviles = estadosCiviles;
-          // No seleccionamos ninguno por defecto, dejamos null para que se muestre "Seleccione una opción"
           _estadoCivilSeleccionado = null;
           _cargandoEstadosCiviles = false;
         });
+        debugPrint(
+          'Estados civiles cargados desde API: ${estadosCiviles.length}',
+        );
       }
     } catch (e) {
       // Verificamos si el widget todavía está montado antes de actualizar el estado
@@ -164,73 +194,342 @@ bool _cargandoMunicipios = false;
           _cargandoEstadosCiviles = false;
         });
 
-        // Mostrar notificación de error
+        // Mostrar notificación de error amigable
         _mostrarError(
-          'No se pudieron cargar las opciones de estado civil. Por favor, intenta nuevamente.',
+          'No se pudieron cargar las opciones de estado civil. Por favor intente nuevamente.',
         );
+        debugPrint('Error al cargar estados civiles: $e');
       }
     }
   }
 
-Future<void> _cargarDepartamentos() async {
-  final hasConnection = await _connectivityService.hasConnection();
+  /// Carga los estados civiles desde la caché local
+  Future<List<EstadoCivil>> _cargarEstadosCivilesDesdeCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-  setState(() {
-    _cargandoDepartamentos = true;
-  });
+      // Verificar si la caché existe y no ha expirado
+      final cacheExpiry = prefs.getInt(kCacheExpiryKey) ?? 0;
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
 
-  if (!hasConnection) {
-    setState(() {
-      _cargandoDepartamentos = false;
-    });
-    _mostrarError('No hay conexión a internet para cargar departamentos.');
-    return;
+      if (currentTime > cacheExpiry) {
+        debugPrint('Caché expirada');
+        return [];
+      }
+
+      final jsonString = prefs.getString(kEstadosCivilesKey);
+      if (jsonString == null || jsonString.isEmpty) {
+        return [];
+      }
+
+      // Decodificar JSON a lista de objetos
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final List<EstadoCivil> estadosCiviles =
+          jsonList
+              .map((json) => EstadoCivil.fromJson(json as Map<String, dynamic>))
+              .toList();
+
+      return estadosCiviles;
+    } catch (e) {
+      debugPrint('Error al cargar estados civiles desde caché: $e');
+      return [];
+    }
   }
 
-  try {
-    final departamentos = await _departamentoService.listar();
+  /// Guarda los estados civiles en la caché local
+  Future<void> _guardarEstadosCivilesEnCache(
+    List<EstadoCivil> estadosCiviles,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    if (mounted) {
+      // Convertir lista a JSON
+      final List<Map<String, dynamic>> jsonList =
+          estadosCiviles.map((estadoCivil) => estadoCivil.toJson()).toList();
+      final String jsonString = jsonEncode(jsonList);
+
+      // Establecer tiempo de expiración (24 horas desde ahora)
+      final int expiryTime =
+          DateTime.now().millisecondsSinceEpoch + kCacheExpiryDuration;
+
+      // Guardar en SharedPreferences
+      await prefs.setString(kEstadosCivilesKey, jsonString);
+      await prefs.setInt(kCacheExpiryKey, expiryTime);
+
+      debugPrint(
+        'Estados civiles guardados en caché: ${estadosCiviles.length}',
+      );
+    } catch (e) {
+      debugPrint('Error al guardar estados civiles en caché: $e');
+    }
+  }
+
+  /// Carga los departamentos desde la caché local o API
+  Future<void> _cargarDepartamentos() async {
+    setState(() {
+      _cargandoDepartamentos = true;
+    });
+
+    // Intentar cargar desde la caché primero
+    final departamentosCached = await _cargarDepartamentosDesdeCache();
+    if (departamentosCached.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _departamentos = departamentosCached;
+          _departamentoSeleccionado = null;
+          _cargandoDepartamentos = false;
+        });
+        debugPrint(
+          'Departamentos cargados desde caché: ${departamentosCached.length}',
+        );
+      }
+      return;
+    }
+
+    // Verificamos si hay conexión a internet para cargar desde la API
+    final hasConnection = await _connectivityService.hasConnection();
+
+    if (!hasConnection) {
       setState(() {
-        _departamentos = departamentos;
-        _departamentoSeleccionado = null;
         _cargandoDepartamentos = false;
       });
+      _mostrarError(
+        'No hay conexión a internet para cargar departamentos. Intente nuevamente más tarde.',
+      );
+      return;
     }
-  } catch (e) {
-    if (mounted) {
+
+    try {
+      // Cargar desde la API
+      final departamentos = await _departamentoService.listar();
+
+      // Guardar en caché para uso futuro
+      await _guardarDepartamentosEnCache(departamentos);
+
+      if (mounted) {
+        setState(() {
+          _departamentos = departamentos;
+          _departamentoSeleccionado = null;
+          _cargandoDepartamentos = false;
+        });
+        debugPrint('Departamentos cargados desde API: ${departamentos.length}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cargandoDepartamentos = false;
+        });
+        _mostrarError(
+          'No se pudieron cargar los departamentos. Por favor intente nuevamente.',
+        );
+        debugPrint('Error al cargar departamentos: $e');
+      }
+    }
+  }
+
+  /// Carga los departamentos desde la caché local
+  Future<List<Departamento>> _cargarDepartamentosDesdeCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Verificar si la caché existe y no ha expirado
+      final cacheExpiry = prefs.getInt(kCacheExpiryKey) ?? 0;
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
+
+      if (currentTime > cacheExpiry) {
+        debugPrint('Caché expirada para departamentos');
+        return [];
+      }
+
+      final jsonString = prefs.getString(kDepartamentosKey);
+      if (jsonString == null || jsonString.isEmpty) {
+        return [];
+      }
+
+      // Decodificar JSON a lista de objetos
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final List<Departamento> departamentos =
+          jsonList
+              .map(
+                (json) => Departamento.fromJson(json as Map<String, dynamic>),
+              )
+              .toList();
+
+      return departamentos;
+    } catch (e) {
+      debugPrint('Error al cargar departamentos desde caché: $e');
+      return [];
+    }
+  }
+
+  /// Guarda los departamentos en la caché local
+  Future<void> _guardarDepartamentosEnCache(
+    List<Departamento> departamentos,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Convertir lista a JSON
+      final List<Map<String, dynamic>> jsonList =
+          departamentos.map((departamento) => departamento.toJson()).toList();
+      final String jsonString = jsonEncode(jsonList);
+
+      // Establecer tiempo de expiración (24 horas desde ahora) si no existe ya
+      final int expiryTime =
+          prefs.getInt(kCacheExpiryKey) ??
+          DateTime.now().millisecondsSinceEpoch + kCacheExpiryDuration;
+
+      // Guardar en SharedPreferences
+      await prefs.setString(kDepartamentosKey, jsonString);
+      await prefs.setInt(kCacheExpiryKey, expiryTime);
+
+      debugPrint('Departamentos guardados en caché: ${departamentos.length}');
+    } catch (e) {
+      debugPrint('Error al guardar departamentos en caché: $e');
+    }
+  }
+
+  Future<void> _cargarMunicipiosPorDepartamento() async {
+    if (_departamentoSeleccionado == null) return;
+
+    final String departamentoCodigo = _departamentoSeleccionado!
+        .toString()
+        .padLeft(2, '0');
+
+    setState(() {
+      _cargandoMunicipios = true;
+    });
+
+    // Intentar cargar desde la caché primero
+    final municipiosCached = await _cargarMunicipiosDesdeCache(
+      departamentoCodigo,
+    );
+    if (municipiosCached.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _municipios = municipiosCached;
+          _municipioSeleccionado = null;
+          _cargandoMunicipios = false;
+        });
+        debugPrint(
+          'Municipios cargados desde caché: ${municipiosCached.length}',
+        );
+      }
+      return;
+    }
+
+    // Verificar conexión a internet
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
       setState(() {
-        _cargandoDepartamentos = false;
+        _cargandoMunicipios = false;
       });
-      _mostrarError('No se pudieron cargar los departamentos.');
+      _mostrarError(
+        'No hay conexión a internet para cargar municipios. Intente nuevamente más tarde.',
+      );
+      return;
+    }
+
+    try {
+      // Cargar desde la API
+      final municipios = await _municipioService.listarPorDepartamento(
+        departamentoCodigo,
+      );
+
+      // Guardar en caché para uso futuro
+      await _guardarMunicipiosEnCache(departamentoCodigo, municipios);
+
+      if (mounted) {
+        setState(() {
+          _municipios = municipios;
+          _municipioSeleccionado = null;
+          _cargandoMunicipios = false;
+        });
+        debugPrint('Municipios cargados desde API: ${municipios.length}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cargandoMunicipios = false;
+        });
+        _mostrarError(
+          'No se pudieron cargar los municipios. Por favor intente nuevamente.',
+        );
+        debugPrint('Error al cargar municipios: $e');
+      }
     }
   }
-}
 
-Future<void> _cargarMunicipiosPorDepartamento() async {
-  if (_departamentoSeleccionado == null) return;
+  /// Carga los municipios desde la caché local
+  Future<List<Municipio>> _cargarMunicipiosDesdeCache(
+    String departamentoCodigo,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-  setState(() {
-    _cargandoMunicipios = true;
-  });
+      // Verificar si la caché existe y no ha expirado
+      final cacheExpiry = prefs.getInt(kCacheExpiryKey) ?? 0;
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
 
-  try {
-    final municipios = await _municipioService
-        .listarPorDepartamento(_departamentoSeleccionado!.toString().padLeft(2, '0'));
+      if (currentTime > cacheExpiry) {
+        debugPrint('Caché expirada para municipios');
+        return [];
+      }
 
-    setState(() {
-      _municipios = municipios;
-      _cargandoMunicipios = false;
-    });
-  } catch (e) {
-    setState(() {
-      _cargandoMunicipios = false;
-    });
-    _mostrarError("Error al cargar municipios para el departamento seleccionado.");
+      // Usamos una clave única para cada departamento
+      final String municipioKey = '$kMunicipiosPrefixKey$departamentoCodigo';
+      final jsonString = prefs.getString(municipioKey);
+      if (jsonString == null || jsonString.isEmpty) {
+        return [];
+      }
+
+      // Decodificar JSON a lista de objetos
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final List<Municipio> municipios =
+          jsonList
+              .map((json) => Municipio.fromJson(json as Map<String, dynamic>))
+              .toList();
+
+      return municipios;
+    } catch (e) {
+      debugPrint('Error al cargar municipios desde caché: $e');
+      return [];
+    }
   }
-}
 
+  /// Guarda los municipios en la caché local
+  Future<void> _guardarMunicipiosEnCache(
+    String departamentoCodigo,
+    List<Municipio> municipios,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
+      // Convertir lista a JSON
+      final List<Map<String, dynamic>> jsonList =
+          municipios.map((municipio) => municipio.toJson()).toList();
+      final String jsonString = jsonEncode(jsonList);
+
+      // Establecer tiempo de expiración (24 horas desde ahora) si no existe ya
+      final int expiryTime =
+          prefs.getInt(kCacheExpiryKey) ??
+          DateTime.now().millisecondsSinceEpoch + kCacheExpiryDuration;
+
+      // Usamos una clave única para cada departamento
+      final String municipioKey = '$kMunicipiosPrefixKey$departamentoCodigo';
+
+      // Guardar en SharedPreferences
+      await prefs.setString(municipioKey, jsonString);
+      await prefs.setInt(kCacheExpiryKey, expiryTime);
+
+      debugPrint('Municipios guardados en caché: ${municipios.length}');
+    } catch (e) {
+      debugPrint('Error al guardar municipios en caché: $e');
+    }
+  }
+
+  // El método limpiarCache() ha sido movido a la pantalla principal
+  // para ser llamado cuando el usuario cierra sesión
 
   // Referencia para la Flushbar actual
   Flushbar? _currentFlushbar;
@@ -245,7 +544,7 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
   }) {
     // Evitar mostrar notificaciones si el widget no está montado
     if (!mounted) return;
-    
+
     // Cerrar la notificación anterior de manera segura
     if (_currentFlushbar != null) {
       // Usar try-catch para evitar errores si la notificación ya está cerrada
@@ -287,7 +586,7 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         }
       },
     );
-    
+
     // Mostrar la notificación de manera segura
     try {
       _currentFlushbar!.show(context);
@@ -341,7 +640,7 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
     _correoController.dispose();
     _direccionController.dispose();
     _municipioController.dispose();
-    
+
     // Cerrar cualquier notificación pendiente de manera segura
     if (_currentFlushbar != null) {
       try {
@@ -351,15 +650,28 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
       }
       _currentFlushbar = null;
     }
-    
+
     super.dispose();
   }
 
+  /// Registra un nuevo usuario con los datos ingresados en el formulario
+  ///
+  /// Este método valida todos los campos del formulario, verifica la conexión a internet,
+  /// y envía los datos al servidor. Muestra mensajes amigables en caso de error.
   Future<void> _registrarUsuario() async {
-    if (!_formkey.currentState!.validate()) return;
+    // Validar el formulario completo
+    if (!_formkey.currentState!.validate()) {
+      _mostrarError(
+        'Por favor complete todos los campos requeridos correctamente',
+      );
+      return;
+    }
 
+    // Verificar que las contraseñas coincidan
     if (_contrasenaController.text != _confirmarContrasenaController.text) {
-      _mostrarError('Las contraseñas no coinciden.');
+      _mostrarError(
+        'Las contraseñas no coinciden. Por favor verifique e intente nuevamente',
+      );
       return;
     }
 
@@ -367,41 +679,75 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
     final hasConnection = await _connectivityService.hasConnection();
     if (!hasConnection) {
       _mostrarError(
-        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+        'No hay conexión a internet. Por favor verifique su conexión e intente nuevamente',
       );
       return;
     }
 
+    // Activar indicador de carga
     setState(() {
       _cargando = true;
     });
 
-    // Verificamos que el estado civil esté seleccionado y sea válido
+    // Verificamos que todos los datos obligatorios estén completos
     if (_estadoCivilSeleccionado == null || _estadoCivilSeleccionado == 0) {
       setState(() {
         _cargando = false;
       });
-      _mostrarError('Por favor, seleccione un estado civil válido.');
+      _mostrarError('Por favor seleccione un estado civil válido');
+      return;
+    }
+
+    if (_departamentoSeleccionado == null) {
+      setState(() {
+        _cargando = false;
+      });
+      _mostrarError('Por favor seleccione un departamento');
+      return;
+    }
+
+    if (_municipioSeleccionado == null && _municipios.isNotEmpty) {
+      setState(() {
+        _cargando = false;
+      });
+      _mostrarError('Por favor seleccione un municipio');
       return;
     }
 
     // Mostrar notificación de carga con barra de progreso
-    _mostrarCargando('Procesando registro...');
+    _mostrarCargando('Procesando su registro...');
 
     try {
+      // Preparar datos para el registro
+      final userData = {
+        'usuario': _usuarioController.text.trim(),
+        'contrasena': _contrasenaController.text,
+        'usuaCreacion': 1,
+        'dni': _dniController.text.trim(),
+        'nombre': _nombreController.text.trim(),
+        'apellido': _apellidoController.text.trim(),
+        'sexo': _sexoSeleccionado,
+        'telefono': _telefonoController.text.trim(),
+        'correo': _correoController.text.trim(),
+        'direccion': _direccionController.text.trim(),
+        'municipioCodigo': _municipioSeleccionado ?? '',
+        'estadoCivilId': _estadoCivilSeleccionado!,
+      };
+
+      // Realizar la solicitud de registro
       final resultado = await _usuarioService.registro(
-        usuario: _usuarioController.text.trim(),
-        contrasena: _contrasenaController.text,
-        usuaCreacion: 1,
-        dni: _dniController.text.trim(),
-        nombre: _nombreController.text.trim(),
-        apellido: _apellidoController.text.trim(),
-        sexo: _sexoSeleccionado,
-        telefono: _telefonoController.text.trim(),
-        correo: _correoController.text.trim(),
-        direccion: _direccionController.text.trim(),
-        municipioCodigo: _municipioSeleccionado ?? '',
-        estadoCivilId: _estadoCivilSeleccionado!,
+        usuario: userData['usuario'] as String,
+        contrasena: userData['contrasena'] as String,
+        usuaCreacion: userData['usuaCreacion'] as int,
+        dni: userData['dni'] as String,
+        nombre: userData['nombre'] as String,
+        apellido: userData['apellido'] as String,
+        sexo: userData['sexo'] as String,
+        telefono: userData['telefono'] as String,
+        correo: userData['correo'] as String,
+        direccion: userData['direccion'] as String,
+        municipioCodigo: userData['municipioCodigo'] as String,
+        estadoCivilId: userData['estadoCivilId'] as int,
       );
 
       // Cerrar cualquier notificación anterior de manera segura
@@ -409,31 +755,32 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         try {
           _currentFlushbar?.dismiss();
         } catch (e) {
-          print('Error al cerrar notificación: $e');
+          debugPrint('Error al cerrar notificación: $e');
         }
         _currentFlushbar = null;
       }
-      
+
       // Obtener el código de estado y mensaje
       final codeStatus = resultado['code_Status'] ?? 0;
       final messageStatus = resultado['message_Status'] ?? 'Sin mensaje';
-      
+
       // Manejar la respuesta según el código de estado
       // 1 = Éxito, -1 = Advertencia, 0 = Error
       if (codeStatus == 1) {
-        // Éxito: Mostrar mensaje y navegar al login
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(messageStatus),
-            backgroundColor: Colors.green.shade700,
-            duration: const Duration(seconds: 1),
-          ),
-        );
+        // Éxito: Mostrar mensaje de éxito
+        _mostrarExito('¡Registro completado exitosamente!');
 
-        // Esperar un momento breve y luego navegar
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          if (mounted) {
-            Navigator.pushReplacement(
+        // Navegar al login después de un breve momento
+        // Usamos Future.microtask para asegurar que la navegación
+        // ocurra después de que se complete el frame actual
+        Future.microtask(() {
+          // Verificar que el widget siga montado antes de navegar
+          if (!mounted) return;
+
+          // Usar WidgetsBinding para asegurar que la navegación ocurra
+          // después de que el primer frame sea renderizado
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushAndRemoveUntil(
               context,
               PageRouteBuilder(
                 pageBuilder:
@@ -455,12 +802,16 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
                   ).chain(CurveTween(curve: curve));
                   var offsetAnimation = animation.drive(tween);
 
-                  return SlideTransition(position: offsetAnimation, child: child);
+                  return SlideTransition(
+                    position: offsetAnimation,
+                    child: child,
+                  );
                 },
                 transitionDuration: const Duration(milliseconds: 500),
               ),
+              (route) => false, // Borra todo el historial previo
             );
-          }
+          });
         });
       } else if (codeStatus == -1) {
         // Advertencia: Mostrar mensaje de advertencia pero no navegar
@@ -471,12 +822,19 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
           duracionSegundos: 5,
         );
       } else {
-        // Error: Mostrar mensaje de error
-        _mostrarError(messageStatus);
+        // Error: Mostrar mensaje de error amigable
+        _mostrarError(
+          messageStatus.contains('usuario ya existe')
+              ? 'El nombre de usuario ya está en uso. Por favor elija otro nombre de usuario'
+              : messageStatus.contains('correo ya existe')
+              ? 'El correo electrónico ya está registrado. ¿Olvidó su contraseña?'
+              : 'No se pudo completar el registro. Por favor intente nuevamente',
+        );
       }
     } catch (e) {
+      debugPrint('Error en registro: $e');
       _mostrarError(
-        'No se pudo completar el registro. Por favor, verifica tu conexión e intenta nuevamente.',
+        'No se pudo completar el registro. Por favor verifique su conexión e intente nuevamente',
       );
     } finally {
       setState(() {
@@ -528,12 +886,15 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         TextFormField(
           controller: _dniController,
           keyboardType: TextInputType.text,
-          onChanged: (_) {
-            _formkey.currentState!.validate(); // Vuelve a validar el campo
-          },
+          textInputAction:
+              TextInputAction.next, // Permite avanzar al siguiente campo
+          textCapitalization:
+              TextCapitalization.characters, // Mayúsculas automáticas
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'DNI / Identidad',
             hintText: 'Ej: 0801199812345',
+            helperText: 'Ingrese los 13 dígitos sin guiones',
             prefixIcon: const Icon(Icons.credit_card),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -541,11 +902,13 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
               borderSide: BorderSide(color: primaryColor, width: 2),
             ),
           ),
-
           validator: (value) {
-            if (value == null || value.isEmpty) return 'El DNI es requerido.';
-            if (value.length < 13)
-              return 'El DNI debe tener al menos 13 caracteres.';
+            if (value == null || value.isEmpty) {
+              return 'El DNI es requerido';
+            }
+            if (value.length < 13) {
+              return 'El DNI debe tener al menos 13 caracteres';
+            }
             return null;
           },
         ),
@@ -554,12 +917,14 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         // Nombre
         TextFormField(
           controller: _nombreController,
-          onChanged: (_) {
-            _formkey.currentState!.validate(); // Vuelve a validar el campo
-          },
+          textInputAction: TextInputAction.next,
+          textCapitalization:
+              TextCapitalization
+                  .words, // Primera letra de cada palabra en mayúscula
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Nombre',
-            hintText: 'Tu nombre',
+            hintText: 'Ingrese su nombre',
             prefixIcon: const Icon(Icons.person),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -567,20 +932,26 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
               borderSide: BorderSide(color: primaryColor, width: 2),
             ),
           ),
-          validator:
-              (value) => value?.isEmpty ?? true ? 'Nombre requerido' : null,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'El nombre es requerido';
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 15),
 
         // Apellido
         TextFormField(
           controller: _apellidoController,
-          onChanged: (_) {
-            _formkey.currentState!.validate(); // Vuelve a validar el campo
-          },
+          textInputAction: TextInputAction.next,
+          textCapitalization:
+              TextCapitalization
+                  .words, // Primera letra de cada palabra en mayúscula
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Apellido',
-            hintText: 'Tu apellido',
+            hintText: 'Ingrese su apellido',
             prefixIcon: const Icon(Icons.person_outline),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -588,50 +959,70 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
               borderSide: BorderSide(color: primaryColor, width: 2),
             ),
           ),
-          validator:
-              (value) => value?.isEmpty ?? true ? 'Apellido requerido' : null,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'El apellido es requerido';
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 15),
 
         // Sexo (Radio Buttons en fila)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
-              child: Text('Sexo', style: TextStyle(fontSize: 16)),
-            ),
-            Row(
-              children:
-                  _opcionesSexo.map((opcion) {
-                    return Expanded(
-                      child: RadioListTile<String>(
-                        title: Text(opcion['texto']),
-                        value: opcion['valor'],
-                        groupValue: _sexoSeleccionado,
-                        onChanged: (valor) {
-                          setState(() {
-                            _sexoSeleccionado = valor!;
-                          });
-                        },
-                        dense: true,
-                      ),
-                    );
-                  }).toList(),
-            ),
-          ],
+        // Mantenemos los radio buttons como prefiere el usuario
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+                child: Text('Sexo', style: TextStyle(fontSize: 16)),
+              ),
+              Row(
+                children:
+                    _opcionesSexo.map((opcion) {
+                      return Expanded(
+                        child: RadioListTile<String>(
+                          title: Text(opcion['texto']),
+                          value: opcion['valor'],
+                          groupValue: _sexoSeleccionado,
+                          activeColor: primaryColor,
+                          onChanged: (valor) {
+                            setState(() {
+                              _sexoSeleccionado = valor!;
+                            });
+                          },
+                          dense: true,
+                        ),
+                      );
+                    }).toList(),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(
-          height: 5,
-        ), // Espacio reducido ya que los radio buttons ocupan más espacio
         const SizedBox(height: 15),
 
         // Estado Civil
+        // Mantenemos la opción por defecto "Seleccione una opción" como prefiere el usuario
         _cargandoEstadosCiviles
             ? const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 16.0),
-                child: CircularProgressIndicator(),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text(
+                      'Cargando estados civiles...',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
               ),
             )
             : DropdownButtonFormField<int?>(
@@ -648,11 +1039,16 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
                 ),
               ),
               hint: const Text('Seleccione una opción'),
+              isExpanded:
+                  true, // Asegura que el dropdown ocupe todo el ancho disponible
               items: [
                 // Opción por defecto
                 const DropdownMenuItem<int?>(
                   value: 0,
-                  child: Text('Seleccione una opción'),
+                  child: Text(
+                    'Seleccione una opción',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
                 // Resto de opciones de estados civiles
                 ..._estadosCiviles.map((estadoCivil) {
@@ -672,7 +1068,7 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
                 setState(() {
                   _estadoCivilSeleccionado = valor;
                 });
-                _formkey.currentState!.validate();
+                // Eliminamos la validación en cada cambio para optimizar rendimiento
               },
             ),
         const SizedBox(height: 15),
@@ -681,12 +1077,12 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         TextFormField(
           controller: _telefonoController,
           keyboardType: TextInputType.phone,
-          onChanged: (_) {
-            _formkey.currentState!.validate(); // Vuelve a validar el campo
-          },
+          textInputAction: TextInputAction.next,
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Teléfono',
             hintText: 'Ej: 98765432',
+            helperText: 'Ingrese su número de teléfono sin guiones',
             prefixIcon: const Icon(Icons.phone),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -695,10 +1091,12 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
             ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'El teléfono es requerido.';
-            if (value.length < 8)
-              return 'Teléfono debe tener al menos 8 dígitos.';
+            if (value == null || value.isEmpty) {
+              return 'El teléfono es requerido';
+            }
+            if (value.length < 8) {
+              return 'El teléfono debe tener al menos 8 dígitos';
+            }
             return null;
           },
         ),
@@ -708,12 +1106,12 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
         TextFormField(
           controller: _correoController,
           keyboardType: TextInputType.emailAddress,
-          onChanged: (_) {
-            _formkey.currentState!.validate(); // Vuelve a validar el campo
-          },
+          textInputAction: TextInputAction.done,
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Correo Electrónico',
             hintText: 'ejemplo@correo.com',
+            helperText: 'Ingrese un correo electrónico válido',
             prefixIcon: const Icon(Icons.email),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -722,10 +1120,12 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
             ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'El correo es requerido.';
-            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value))
-              return 'Correo inválido.';
+            if (value == null || value.isEmpty) {
+              return 'El correo es requerido';
+            }
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+              return 'Ingrese un correo electrónico válido';
+            }
             return null;
           },
         ),
@@ -734,128 +1134,194 @@ Future<void> _cargarMunicipiosPorDepartamento() async {
   }
 
   Widget _construirPasoDireccionMunicipio() {
-  final primaryColor = Theme.of(context).colorScheme.primary;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // Dirección
-      TextFormField(
-        controller: _direccionController,
-        maxLines: 2,
-        decoration: InputDecoration(
-          labelText: 'Dirección',
-          hintText: 'Tu dirección completa',
-          prefixIcon: const Icon(Icons.home),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: primaryColor, width: 2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Dirección
+        TextFormField(
+          controller: _direccionController,
+          maxLines: 2,
+          textInputAction: TextInputAction.next,
+          textCapitalization:
+              TextCapitalization
+                  .sentences, // Primera letra de cada oración en mayúscula
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
+          decoration: InputDecoration(
+            labelText: 'Dirección',
+            hintText: 'Ingrese su dirección completa',
+            helperText: 'Calle, número, colonia, referencias',
+            prefixIcon: const Icon(Icons.home),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
           ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'La dirección es requerida';
+            }
+            if (value.length < 5) {
+              return 'Ingrese una dirección más detallada';
+            }
+            return null;
+          },
         ),
-        validator: (value) =>
-            value?.isEmpty ?? true ? 'La dirección es requerida.' : null,
-      ),
-      const SizedBox(height: 15),
+        const SizedBox(height: 15),
 
-      // Departamento
-_cargandoDepartamentos
-    ? const Center(child: CircularProgressIndicator())
-    : DropdownButtonFormField<int?>(
-        value: _departamentoSeleccionado,
-        decoration: InputDecoration(
-          labelText: 'Departamento',
-          prefixIcon: const Icon(Icons.map),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: primaryColor, width: 2),
-          ),
-        ),
-        hint: const Text('Seleccione un Depto.'),
-        items: [
-          const DropdownMenuItem<int?>(
-            value: null,
-            child: Text('Seleccione un Depto.'),
-          ),
-          ..._departamentos.map((depa) {
-            return DropdownMenuItem<int?>(
-              value: int.tryParse(depa.depa_Codigo),
-              child: Text(depa.depa_Nombre,   overflow: TextOverflow.ellipsis,),
-              
-            );
-          }).toList(),
-        ],
-        onChanged: (value) {
-          setState(() {
-            _departamentoSeleccionado = value;
-            _municipioSeleccionado = null;
-            _municipios = [];
-            _cargarMunicipiosPorDepartamento();
-          });
-        },
-        validator: (value) {
-          if (value == null) return 'Seleccione un Depto.';
-          return null;
-        },
-      ),
-
-const SizedBox(height: 15),
-
-// Municipio
-_cargandoMunicipios
-    ? const Center(child: CircularProgressIndicator())
-    : DropdownButtonFormField<String?>(
-        value: _municipioSeleccionado,
-        decoration: InputDecoration(
-          labelText: 'Municipio',
-          prefixIcon: const Icon(Icons.location_city),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: primaryColor, width: 2),
-          ),
-        ),
-        hint: const Text('Seleccione un municipio'),
-        items: _municipios.isEmpty
-            ? [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('No se encontraron Mpios.'),
-                )
-              ]
-            : [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Seleccione un municipio'),
+        // Departamento
+        _cargandoDepartamentos
+            ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text(
+                      'Cargando departamentos...',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
                 ),
-                ..._municipios.map((muni) {
-                  return DropdownMenuItem<String?>(
-                    value: muni.muni_Codigo,
-                    child: Text(muni.muni_Nombre, overflow: TextOverflow.ellipsis,),
+              ),
+            )
+            : DropdownButtonFormField<int?>(
+              value: _departamentoSeleccionado,
+              decoration: InputDecoration(
+                labelText: 'Departamento',
+                prefixIcon: const Icon(Icons.map),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: primaryColor, width: 2),
+                ),
+              ),
+              hint: const Text('Seleccione un departamento'),
+              isExpanded:
+                  true, // Asegura que el dropdown ocupe todo el ancho disponible
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text(
+                    'Seleccione un departamento',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ..._departamentos.map((depa) {
+                  return DropdownMenuItem<int?>(
+                    value: int.tryParse(depa.depa_Codigo),
+                    child: Text(
+                      depa.depa_Nombre,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   );
-                }).toList()
+                }).toList(),
               ],
-        onChanged: _municipios.isEmpty
-            ? null
-            : (value) {
+              onChanged: (value) {
                 setState(() {
-                  _municipioSeleccionado = value;
+                  _departamentoSeleccionado = value;
+                  _municipioSeleccionado = null;
+                  _municipios = [];
+                  _cargarMunicipiosPorDepartamento();
                 });
               },
-        validator: (value) {
-          if (_municipios.isEmpty) return null;
-          if (value == null) return 'Seleccione un municipio';
-          return null;
-        },
-      ),
+              validator: (value) {
+                if (value == null) {
+                  return 'Por favor seleccione un departamento';
+                }
+                return null;
+              },
+            ),
+        const SizedBox(height: 15),
 
-
-      
-    ],
-  );
-}
-
+        // Municipio
+        _cargandoMunicipios
+            ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text(
+                      'Cargando municipios...',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            : DropdownButtonFormField<String?>(
+              value: _municipioSeleccionado,
+              decoration: InputDecoration(
+                labelText: 'Municipio',
+                prefixIcon: const Icon(Icons.location_city),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: primaryColor, width: 2),
+                ),
+              ),
+              hint: const Text('Seleccione un municipio'),
+              isExpanded:
+                  true, // Asegura que el dropdown ocupe todo el ancho disponible
+              items:
+                  _municipios.isEmpty
+                      ? [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            'No se encontraron municipios',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ]
+                      : [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(
+                            'Seleccione un municipio',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                        ..._municipios.map((muni) {
+                          return DropdownMenuItem<String?>(
+                            value: muni.muni_Codigo,
+                            child: Text(
+                              muni.muni_Nombre,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                      ],
+              onChanged:
+                  _municipios.isEmpty
+                      ? null
+                      : (value) {
+                        setState(() {
+                          _municipioSeleccionado = value;
+                        });
+                      },
+              validator: (value) {
+                if (_municipios.isEmpty) {
+                  return null; // No validamos si no hay municipios disponibles
+                }
+                if (value == null) {
+                  return 'Por favor seleccione un municipio';
+                }
+                return null;
+              },
+            ),
+      ],
+    );
+  }
 
   Widget _construirPasoDatosUsuario() {
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -866,9 +1332,15 @@ _cargandoMunicipios
         // Usuario
         TextFormField(
           controller: _usuarioController,
+          textInputAction: TextInputAction.next,
+          textCapitalization:
+              TextCapitalization
+                  .none, // Sin mayúsculas automáticas para nombre de usuario
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Nombre de Usuario',
             hintText: 'Ej: usuario123',
+            helperText: 'Mínimo 3 caracteres, sin espacios',
             prefixIcon: const Icon(Icons.account_circle),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -877,21 +1349,30 @@ _cargandoMunicipios
             ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'El usuario es requerido.';
-            if (value.length < 3)
-              return 'El usuario debe tener al menos 3 caracteres.';
+            if (value == null || value.isEmpty) {
+              return 'Por favor ingrese un nombre de usuario';
+            }
+            if (value.length < 3) {
+              return 'El nombre de usuario debe tener al menos 3 caracteres';
+            }
+            if (value.contains(' ')) {
+              return 'El nombre de usuario no debe contener espacios';
+            }
             return null;
           },
         ),
         const SizedBox(height: 15),
+
         // Contraseña
         TextFormField(
           controller: _contrasenaController,
-          obscureText: true,
+          obscureText: true, // Oculta el texto para contraseñas
+          textInputAction: TextInputAction.next,
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Contraseña',
-            hintText: 'Mínimo 6 caracteres',
+            hintText: 'Ingrese su contraseña',
+            helperText: 'Mínimo 6 caracteres, use letras y números',
             prefixIcon: const Icon(Icons.lock),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -900,21 +1381,29 @@ _cargandoMunicipios
             ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'La contraseña es requerida.';
-            if (value.length < 6)
-              return 'La contraseña debe tener al menos 6 caracteres.';
+            if (value == null || value.isEmpty) {
+              return 'Por favor ingrese una contraseña';
+            }
+            if (value.length < 6) {
+              return 'La contraseña debe tener al menos 6 caracteres';
+            }
+            // Podemos agregar validaciones adicionales de seguridad si se requieren
+            // Por ejemplo: verificar que contenga al menos un número y una letra
             return null;
           },
         ),
         const SizedBox(height: 15),
+
         // Confirmar Contraseña
         TextFormField(
           controller: _confirmarContrasenaController,
-          obscureText: true,
+          obscureText: true, // Oculta el texto para contraseñas
+          textInputAction: TextInputAction.done,
+          // Eliminamos la validación en cada cambio para optimizar rendimiento
           decoration: InputDecoration(
             labelText: 'Confirmar Contraseña',
-            hintText: 'Repite tu contraseña',
+            hintText: 'Repita su contraseña',
+            helperText: 'Debe coincidir con la contraseña anterior',
             prefixIcon: const Icon(Icons.lock_outline),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
@@ -923,10 +1412,12 @@ _cargandoMunicipios
             ),
           ),
           validator: (value) {
-            if (value == null || value.isEmpty)
-              return 'Debe confirmar la contraseña.';
-            if (value != _contrasenaController.text)
-              return 'Las contraseñas no coinciden.';
+            if (value == null || value.isEmpty) {
+              return 'Por favor confirme su contraseña';
+            }
+            if (value != _contrasenaController.text) {
+              return 'Las contraseñas no coinciden';
+            }
             return null;
           },
         ),
@@ -1000,7 +1491,7 @@ _cargandoMunicipios
                             Expanded(
                               child: GestureDetector(
                                 onTap: () {
-                                  Navigator.pushReplacement(
+                                  Navigator.pushAndRemoveUntil(
                                     context,
                                     PageRouteBuilder(
                                       pageBuilder:
@@ -1039,6 +1530,8 @@ _cargandoMunicipios
                                         milliseconds: 500,
                                       ),
                                     ),
+                                    (route) =>
+                                        false, // Borra todo el historial previo
                                   );
                                 },
                                 child: Container(

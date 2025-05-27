@@ -9,15 +9,13 @@
 // Fecha: Mayo 2025
 // =============================================================================
 
-import 'dart:io';
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:sistema_reportes/services/usuarioService.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/usuarioService.dart';
 import '../models/usuarioViewModel.dart';
-import '../screens/principal.dart';
-import '../screens/Registrarse.dart';
+import 'Registrarse.dart';
+import 'principal.dart';
+import 'recuperar_contrasena.dart';
 
 /// Widget principal de la pantalla de login.
 ///
@@ -65,12 +63,18 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Se ejecuta cuando el widget se inserta en el árbol de widgets
   ///
   /// Verifica si hay una sesión activa guardada para realizar
-  /// un inicio de sesión automático
+  /// un inicio de sesión automático. Utilizamos addPostFrameCallback para
+  /// asegurar que la navegación no ocurra durante el ciclo de construcción inicial.
   @override
   void initState() {
     super.initState();
-    // Verificar si hay una sesión activa al iniciar
-    _verificarSesion();
+
+    // Utilizamos addPostFrameCallback para asegurar que cualquier navegación
+    // ocurra después de que el frame inicial se haya completado
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Verificar si hay una sesión activa al iniciar
+      _verificarSesion();
+    });
   }
 
   /// Libera recursos cuando el widget se elimina del árbol de widgets
@@ -86,16 +90,29 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Si encuentra una sesión activa (el usuario marcó "Mantener sesión activa"
   /// en su último inicio de sesión), navega automáticamente a la pantalla principal
   /// sin requerir que el usuario vuelva a ingresar sus credenciales.
+  ///
+  /// IMPORTANTE: Este método se llama después de que el primer frame
+  /// ha sido renderizado para evitar conflictos de navegación.
   Future<void> _verificarSesion() async {
+    // Verificamos que el widget siga montado antes de continuar
+    if (!mounted) return;
+
     try {
       final sesionActiva = await storage.read(key: 'sesion_activa');
 
       if (sesionActiva == 'true') {
+        // Verificamos nuevamente que el widget siga montado antes de navegar
+        if (!mounted) return;
+
         // Si hay una sesión activa, navegar a la pantalla principal
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const principalScreen()),
-        );
+        // Usamos Future.microtask para asegurar que la navegación ocurre
+        // fuera del ciclo actual de construcción
+        Future.microtask(() {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const principalScreen()),
+          );
+        });
       }
     } catch (e) {
       print('Error al verificar la sesión: $e');
@@ -167,11 +184,14 @@ class _LoginScreenState extends State<LoginScreen> {
   ///    - Guarda los datos del usuario en el almacenamiento seguro
   ///    - Muestra un mensaje de éxito
   ///    - Navega a la pantalla principal
-  /// 5. Si la autenticación falla, muestra un mensaje de error
+  /// 5. Si la autenticación falla, muestra un mensaje de error amigable
   /// 6. Oculta el indicador de carga al finalizar
-  void _iniciarSesion() async {
+  Future<void> _iniciarSesion() async {
     // Validar el formulario
     if (!_formkey.currentState!.validate()) return;
+
+    // Verificar que el widget siga montado
+    if (!mounted) return;
 
     // Mostrar indicador de carga y limpiar mensajes previos
     setState(() {
@@ -186,38 +206,59 @@ class _LoginScreenState extends State<LoginScreen> {
         _contrasenaController.text.trim(),
       );
 
+      // Verificar nuevamente que el widget siga montado
+      if (!mounted) return;
+
       // Verificar si la autenticación fue exitosa
       if (usuario != null &&
           (usuario.code_Status == 1 || usuario.code_Status == null)) {
         // Guardar datos del usuario en el almacenamiento seguro
         await _guardarDatosUsuario(usuario);
 
+        // Verificar nuevamente que el widget siga montado
+        if (!mounted) return;
+
         // Mostrar mensaje de éxito
         setState(() {
-          _mensaje = 'Login exitoso';
+          _mensaje = 'Inicio de sesión exitoso';
         });
 
-        // Navegar a la pantalla principal
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const principalScreen()),
-        );
+        // Usar Future.microtask para asegurar que la navegación ocurra
+        // fuera del ciclo actual de construcción y evitar errores
+        Future.microtask(() {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const principalScreen()),
+            );
+          }
+        });
       } else {
-        // Mostrar mensaje de error si las credenciales son incorrectas
+        // Mostrar mensaje de error amigable si las credenciales son incorrectas
         setState(() {
-          _mensaje = 'Usuario o contraseña incorrecta';
+          _mensaje =
+              'Credenciales incorrectas. Por favor verifique su usuario y contraseña.';
         });
       }
     } catch (e) {
-      // Capturar y mostrar cualquier error que ocurra durante la autenticación
+      // Si el widget ya no está montado, no hacer nada
+      if (!mounted) return;
+
+      // Mensaje de error amigable para el usuario, sin detalles técnicos
       setState(() {
-        _mensaje = 'Error al iniciar sesion: $e';
+        _mensaje =
+            'No se pudo iniciar sesión. Verifique su conexión e intente nuevamente.';
       });
+
+      // Imprimir el error técnico en la consola para depuración
+      print('Error técnico durante el inicio de sesión: $e');
     } finally {
-      // Ocultar el indicador de carga al finalizar
-      setState(() {
-        _cargando = false;
-      });
+      // Verificar que el widget siga montado antes de actualizar el estado
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+        });
+      }
     }
   }
 
@@ -253,335 +294,457 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
           ),
         ),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.assignment_outlined,
-                  size: 60,
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Sistema de Reportes',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 30),
-
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // ===============================================================
-                      // TAB DE NAVEGACIÓN (INICIAR SESIÓN / REGISTRARSE)
-                      // ===============================================================
-                      // Este componente implementa un tab de navegación personalizado que
-                      // permite al usuario alternar entre las pantallas de inicio de sesión
-                      // y registro. Está diseñado como un contenedor con fondo gris claro
-                      // que contiene dos botones (tabs).
-                      //
-                      // El tab seleccionado (en este caso "Iniciar Sesión") se muestra con
-                      // fondo azul y texto blanco. El tab no seleccionado tiene fondo
-                      // transparente y texto negro.
-                      //
-                      // IMPORTANTE: Tu compañero debe implementar un diseño similar en la
-                      // pantalla de registro, pero con el tab "Registrarse" seleccionado
-                      // y el tab "Iniciar Sesión" no seleccionado.
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(10),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
                         ),
-                        child: Row(
-                          children: [
-                            // Tab "Iniciar Sesión" (seleccionado en esta pantalla)
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  // Ya estamos en la pantalla de login, no necesitamos navegación
-                                  // En la pantalla de registro, este onTap debe navegar de vuelta a LoginScreen
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    // Este tab está seleccionado, por lo que tiene fondo azul
-                                    color: Colors.blue.shade700,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Iniciar Sesión',
-                                      style: TextStyle(
-                                        // Texto blanco para el tab seleccionado
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.2),
+                                blurRadius: 10,
+                                spreadRadius: 1,
                               ),
-                            ),
-                            // Tab "Registrarse" (no seleccionado en esta pantalla)
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  // Navegar a la pantalla de registro
-                                  // IMPORTANTE: Tu compañero debe implementar la navegación inversa
-                                  // en la pantalla de registro (volver a LoginScreen)
-                                  Navigator.push(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder: (context, animation, secondaryAnimation) =>
-                                          const RegistrarseScreen(),
-                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                        var begin = const Offset(1.0, 0.0);
-                                        var end = Offset.zero;
-                                        var curve = Curves.easeInOutQuart;
-                                        
-                                        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                                        var offsetAnimation = animation.drive(tween);
-                                        
-                                        return SlideTransition(
-                                          position: offsetAnimation,
-                                          child: child,
-                                        );
-                                      },
-                                      transitionDuration: const Duration(milliseconds: 500),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    // Este tab no está seleccionado, por lo que tiene fondo transparente
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Registrarse',
-                                      style: TextStyle(
-                                        // Texto negro para el tab no seleccionado
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.assignment_outlined,
+                            size: 50,
+                            color: Colors.blue,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      Form(
-                        key: _formkey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Iniciar Sesión',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            TextFormField(
-                              controller: _usuarioController,
-                              decoration: InputDecoration(
-                                labelText: 'Usuario',
-                                hintText: 'Ingrese su nombre de usuario',
-                                prefixIcon: const Icon(Icons.person),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
-                                  ),
+                        const SizedBox(height: 20),
+                        RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'SI',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade800,
                                 ),
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'El campo usuario es requerido.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            TextFormField(
-                              controller: _contrasenaController,
-                              obscureText: true,
-                              decoration: InputDecoration(
-                                labelText: 'Contraseña',
-                                hintText: 'Ingrese su contraseña',
-                                prefixIcon: const Icon(Icons.lock),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                    color: primaryColor,
-                                    width: 2,
-                                  ),
+                              TextSpan(
+                                text: 'RESP',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade600,
                                 ),
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'El campo contraseña es requerido.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 10),
-
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _mantenerSesion,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _mantenerSesion = value ?? true;
-                                    });
+                            ],
+                          ),
+                        ),
+                        const Text(
+                          'Sistema de Reportes',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        // ===============================================================
+                        // TAB DE NAVEGACIÓN (INICIAR SESIÓN / REGISTRARSE)
+                        // ===============================================================
+                        // Este componente implementa un tab de navegación personalizado que
+                        // permite al usuario alternar entre las pantallas de inicio de sesión
+                        // y registro. Está diseñado como un contenedor con fondo gris claro
+                        // que contiene dos botones (tabs).
+                        //
+                        // El tab seleccionado (en este caso "Iniciar Sesión") se muestra con
+                        // fondo azul y texto blanco. El tab no seleccionado tiene fondo
+                        // transparente y texto negro.
+                        //
+                        // IMPORTANTE: Tu compañero debe implementar un diseño similar en la
+                        // pantalla de registro, pero con el tab "Registrarse" seleccionado
+                        // y el tab "Iniciar Sesión" no seleccionado.
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              // Tab "Iniciar Sesión" (seleccionado en esta pantalla)
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // Ya estamos en la pantalla de login, no necesitamos navegación
+                                    // En la pantalla de registro, este onTap debe navegar de vuelta a LoginScreen
                                   },
-                                  activeColor: Colors.blue.shade700,
-                                ),
-                                const Text(
-                                  'Mantener sesión activa',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                Tooltip(
-                                  message:
-                                      'Si activas esta opción, no tendrás que iniciar sesión la próxima vez que abras la aplicación',
-                                  child: const Icon(
-                                    Icons.info_outline,
-                                    size: 18,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: _cargando ? null : _iniciarSesion,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade700,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  elevation: 5,
-                                ),
-                                child:
-                                    _cargando
-                                        ? const SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                        : const Text(
-                                          'INICIAR SESIÓN',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      // Este tab está seleccionado, por lo que tiene fondo azul
+                                      color: Colors.blue.shade700,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        'Iniciar Sesión',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          // Texto blanco para el tab seleccionado
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
                                         ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              // Tab "Registrarse" (no seleccionado en esta pantalla)
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // Navegar a la pantalla de registro
+                                    // IMPORTANTE: Tu compañero debe implementar la navegación inversa
+                                    // en la pantalla de registro (volver a LoginScreen)
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder:
+                                            (
+                                              context,
+                                              animation,
+                                              secondaryAnimation,
+                                            ) => const RegistrarseScreen(),
+                                        transitionsBuilder: (
+                                          context,
+                                          animation,
+                                          secondaryAnimation,
+                                          child,
+                                        ) {
+                                          var begin = const Offset(1.0, 0.0);
+                                          var end = Offset.zero;
+                                          var curve = Curves.easeInOutQuart;
 
-                            if (_mensaje.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 20),
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _mensaje.contains('exitoso')
-                                            ? Colors.green.withOpacity(0.1)
-                                            : Colors.red.withOpacity(0.1),
+                                          var tween = Tween(
+                                            begin: begin,
+                                            end: end,
+                                          ).chain(CurveTween(curve: curve));
+                                          var offsetAnimation = animation.drive(
+                                            tween,
+                                          );
+
+                                          return SlideTransition(
+                                            position: offsetAnimation,
+                                            child: child,
+                                          );
+                                        },
+                                        transitionDuration: const Duration(
+                                          milliseconds: 500,
+                                        ),
+                                      ),
+                                      (route) =>
+                                          false, // Borra todo el historial previo
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      // Este tab no está seleccionado, por lo que tiene fondo transparente
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        'Registrarse',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          // Texto negro para el tab no seleccionado
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        Form(
+                          key: _formkey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Text(
+                                'Iniciar Sesión',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              TextFormField(
+                                controller: _usuarioController,
+                                decoration: InputDecoration(
+                                  labelText: 'Usuario',
+                                  hintText: 'Ingrese su nombre de usuario',
+                                  prefixIcon: const Icon(Icons.person),
+                                  border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(
+                                      color: primaryColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'El campo usuario es requerido.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
+
+                              TextFormField(
+                                controller: _contrasenaController,
+                                obscureText: true,
+                                decoration: InputDecoration(
+                                  labelText: 'Contraseña',
+                                  hintText: 'Ingrese su contraseña',
+                                  prefixIcon: const Icon(Icons.lock),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(
+                                      color: primaryColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'El campo contraseña es requerido.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Opción para recuperar contraseña
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    // Navegar a la pantalla de recuperación de contraseña
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder:
+                                            (
+                                              context,
+                                              animation,
+                                              secondaryAnimation,
+                                            ) =>
+                                                const RecuperarContrasenaScreen(),
+                                        transitionsBuilder: (
+                                          context,
+                                          animation,
+                                          secondaryAnimation,
+                                          child,
+                                        ) {
+                                          var begin = const Offset(
+                                            1.0,
+                                            0.0,
+                                          ); // Desde la derecha
+                                          var end = Offset.zero;
+                                          var curve = Curves.easeInOutQuart;
+
+                                          var tween = Tween(
+                                            begin: begin,
+                                            end: end,
+                                          ).chain(CurveTween(curve: curve));
+                                          var offsetAnimation = animation.drive(
+                                            tween,
+                                          );
+
+                                          return SlideTransition(
+                                            position: offsetAnimation,
+                                            child: child,
+                                          );
+                                        },
+                                        transitionDuration: const Duration(
+                                          milliseconds: 500,
+                                        ),
+                                      ),
+                                      (route) =>
+                                          false, // Borra todo el historial previo
+                                    );
+                                  },
+                                  child: const Text(
+                                    '¿Olvidaste la contraseña?',
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _mantenerSesion,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _mantenerSesion = value ?? true;
+                                      });
+                                    },
+                                    activeColor: Colors.blue.shade700,
+                                  ),
+                                  const Text(
+                                    'Mantener sesión activa',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  Tooltip(
+                                    message:
+                                        'Si activas esta opción, no tendrás que iniciar sesión la próxima vez que abras la aplicación',
+                                    child: const Icon(
+                                      Icons.info_outline,
+                                      size: 18,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _cargando ? null : _iniciarSesion,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue.shade700,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    elevation: 5,
+                                  ),
+                                  child:
+                                      _cargando
+                                          ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                          : const Text(
+                                            'INICIAR SESIÓN',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                ),
+                              ),
+
+                              if (_mensaje.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 20),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
                                       color:
                                           _mensaje.contains('exitoso')
-                                              ? Colors.green
-                                              : Colors.red,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        _mensaje.contains('exitoso')
-                                            ? Icons.check_circle
-                                            : Icons.error,
+                                              ? Colors.green.withOpacity(0.1)
+                                              : Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
                                         color:
                                             _mensaje.contains('exitoso')
                                                 ? Colors.green
                                                 : Colors.red,
                                       ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          _mensaje,
-                                          style: TextStyle(
-                                            color:
-                                                _mensaje.contains('exitoso')
-                                                    ? Colors.green
-                                                    : Colors.red,
-                                            fontWeight: FontWeight.bold,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          _mensaje.contains('exitoso')
+                                              ? Icons.check_circle
+                                              : Icons.error,
+                                          color:
+                                              _mensaje.contains('exitoso')
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            _mensaje,
+                                            style: TextStyle(
+                                              color:
+                                                  _mensaje.contains('exitoso')
+                                                      ? Colors.green
+                                                      : Colors.red,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

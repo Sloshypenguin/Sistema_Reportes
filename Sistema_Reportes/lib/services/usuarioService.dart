@@ -57,6 +57,138 @@ class UsuarioService {
     }
   }
 
+  /// Verifica si un usuario existe en el sistema
+  /// 
+  /// Retorna el ID del usuario y su correo electrónico si existe
+  /// El código de estado puede ser:
+  /// - Positivo (>0): ID del usuario (exitoso)
+  /// - 0: Error
+  /// - -1: Advertencia
+  Future<Map<String, dynamic>> verificarUsuario(String usuario) async {
+    // Verificar conectividad
+    bool hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+    }
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Verificar');
+    final response = await http.post(
+      url,
+      headers: ApiConfig.headers,
+      body: jsonEncode({
+        'usua_Usuario': usuario,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      final codeStatus = jsonMap['data']['code_Status'] ?? 0;
+      final messageStatus = jsonMap['data']['message_Status'] ?? '';
+      
+      return {
+        'success': jsonMap['success'] ?? false,
+        'message': jsonMap['message'] ?? 'Error al verificar usuario',
+        'codeStatus': codeStatus,
+        'messageStatus': messageStatus,
+        'usuarioId': codeStatus > 0 ? codeStatus : 0, // Si es positivo, es el ID
+        'correo': messageStatus,
+      };
+    } else {
+      throw Exception('Error al verificar usuario: ${response.statusCode}');
+    }
+  }
+  
+  /// Genera un código de restablecimiento para un usuario
+  /// 
+  /// Retorna el token generado
+  Future<String> generarCodigoRestablecimiento(int usuarioId) async {
+    // Verificar conectividad
+    bool hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+    }
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/GenerarCodigoRestablecimiento');
+    final response = await http.post(
+      url,
+      headers: ApiConfig.headers,
+      body: jsonEncode({
+        'usua_Id': usuarioId,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      if (jsonMap['success'] == true) {
+        return jsonMap['data']['token'] ?? '';
+      } else {
+        throw Exception(jsonMap['message'] ?? 'Error al generar código de restablecimiento');
+      }
+    } else {
+      throw Exception('Error al generar código de restablecimiento: ${response.statusCode}');
+    }
+  }
+  
+  /// Valida el código de restablecimiento ingresado por el usuario
+  /// 
+  /// Retorna true si el código es válido
+  Future<bool> validarCodigo(int usuarioId, String token) async {
+    // Verificar conectividad
+    bool hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+    }
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/ValidarCodigo');
+    final response = await http.post(
+      url,
+      headers: ApiConfig.headers,
+      body: jsonEncode({
+        'usua_Id': usuarioId,
+        'usua_Token': token,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      final codeStatus = jsonMap['data']['code_Status'] ?? 0;
+      // 1 = éxito, -1 = advertencia, 0 = error
+      return codeStatus == 1;
+    } else {
+      throw Exception('Error al validar código: ${response.statusCode}');
+    }
+  }
+  
+  /// Restablece la contraseña del usuario
+  /// 
+  /// Retorna true si la contraseña se restableció correctamente
+  Future<bool> restablecerContrasena(int usuarioId, String nuevaContrasena) async {
+    // Verificar conectividad
+    bool hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+    }
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/ReestablecerClave');
+    final response = await http.post(
+      url,
+      headers: ApiConfig.headers,
+      body: jsonEncode({
+        'usua_Id': usuarioId,
+        'usua_Contrasena': nuevaContrasena,
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      final codeStatus = jsonMap['data']['code_Status'] ?? 0;
+      // 1 = éxito, -1 = advertencia, 0 = error
+      return codeStatus == 1;
+    } else {
+      throw Exception('Error al restablecer contraseña: ${response.statusCode}');
+    }
+  }
+
   /// Registra un nuevo usuario en el sistema con datos de persona
   Future<Map<String, dynamic>> registro({
     required String usuario,

@@ -1,16 +1,16 @@
 /// Modelo para representar un Municipio en el sistema
-/// 
+///
 /// Esta clase mapea los datos de un municipio desde la API
 /// y proporciona métodos para convertir entre JSON y objetos.
 class Municipio {
-  final int     muni_Id;
-  final String  muni_Codigo;
-  final String  muni_Nombre;
-  final int     depa_Id;
+  final int muni_Id;
+  final String muni_Codigo;
+  final String muni_Nombre;
+  final int depa_Id;
   final String? depa_Nombre;
-  final int     usua_Creacion;
-  final int?    usua_Modificacion;
-  final String  muni_FechaCreacion;
+  final int usua_Creacion;
+  final int? usua_Modificacion;
+  final String muni_FechaCreacion;
   final String? muni_FechaModificacion;
 
   Municipio({
