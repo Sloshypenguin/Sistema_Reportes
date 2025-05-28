@@ -11,15 +11,6 @@ import 'editor_perfil.dart';
 /// a una aplicación Angular, con una barra superior, menú lateral y
 /// área de contenido donde se muestran las diferentes páginas.
 class PlantillaBase extends StatefulWidget {
-  /// Widget hijo que se mostrará en el área de contenido
-  final Widget child;
-  
-  /// Título que se mostrará en la barra superior
-  final String titulo;
-  
-  /// Indica si se debe mostrar el botón de regreso
-  final bool mostrarBotonRegresar;
-  
   /// Constructor del widget
   const PlantillaBase({
     Key? key,
@@ -28,24 +19,33 @@ class PlantillaBase extends StatefulWidget {
     this.mostrarBotonRegresar = false,
   }) : super(key: key);
 
+  /// Widget hijo que se mostrará en el área de contenido
+  final Widget child;
+
+  /// Indica si se debe mostrar el botón de regreso
+  final bool mostrarBotonRegresar;
+
+  /// Título que se mostrará en la barra superior
+  final String titulo;
+
   @override
   State<PlantillaBase> createState() => _PlantillaBaseState();
 }
 
 class _PlantillaBaseState extends State<PlantillaBase> {
-  final storage = FlutterSecureStorage();
-  
+  List<dynamic> menuItems = [];
   // Datos del usuario
   String nombreUsuario = 'Usuario';
+
   String rolUsuario = 'Rol no disponible';
-  List<dynamic> menuItems = [];
-  
+  final storage = FlutterSecureStorage();
+
   @override
   void initState() {
     super.initState();
     _cargarDatosUsuario();
   }
-  
+
   /// Carga los datos del usuario desde el almacenamiento seguro
   Future<void> _cargarDatosUsuario() async {
     try {
@@ -75,7 +75,7 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       debugPrint('Error al cargar datos del usuario: $e');
     }
   }
-  
+
   /// Cierra la sesión del usuario
   Future<void> _cerrarSesion() async {
     final confirmar = await showDialog<bool>(
@@ -126,7 +126,7 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       }
     }
   }
-  
+
   /// Limpia todas las cachés de datos usadas en la aplicación
   Future<void> _limpiarCacheDatos() async {
     try {
@@ -156,7 +156,7 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       debugPrint('Error al limpiar caché: $e');
     }
   }
-  
+
   /// Muestra el diálogo para editar el perfil del usuario
   void _mostrarDialogoEditarPerfil() {
     mostrarEditorPerfil(
@@ -167,72 +167,7 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       },
     );
   }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.titulo),
-        leading: widget.mostrarBotonRegresar 
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
-            )
-          : null,
-        actions: [
-          // Avatar de perfil con menú desplegable
-          Padding(
-            padding: const EdgeInsets.only(right: 10.0),
-            child: PopupMenuButton<String>(
-              offset: const Offset(0, 45),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              onSelected: (value) {
-                if (value == 'perfil') {
-                  _mostrarDialogoEditarPerfil();
-                } else if (value == 'cerrar_sesion') {
-                  _cerrarSesion();
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'perfil',
-                  child: Row(
-                    children: const [
-                      Icon(Icons.person, color: Colors.blue),
-                      SizedBox(width: 10),
-                      Text('Editar Perfil'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'cerrar_sesion',
-                  child: Row(
-                    children: const [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 10),
-                      Text('Cerrar Sesión'),
-                    ],
-                  ),
-                ),
-              ],
-              child: CircleAvatar(
-                backgroundColor: Colors.blue.shade100,
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      drawer: menuItems.isNotEmpty ? _construirMenuLateral() : null,
-      body: widget.child,
-    );
-  }
-  
+
   /// Construye el menú lateral con las opciones disponibles para el usuario
   Widget _construirMenuLateral() {
     return Drawer(
@@ -323,7 +258,7 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       ),
     );
   }
-  
+
   /// Obtiene el icono correspondiente a la cadena proporcionada
   IconData _obtenerIcono(String iconoStr) {
     switch (iconoStr.toLowerCase()) {
@@ -342,6 +277,71 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       default:
         return Icons.circle;
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.titulo),
+        leading: widget.mostrarBotonRegresar 
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          : null,
+        actions: [
+          // Avatar de perfil con menú desplegable
+          Padding(
+            padding: const EdgeInsets.only(right: 10.0),
+            child: PopupMenuButton<String>(
+              offset: const Offset(0, 45),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              onSelected: (value) {
+                if (value == 'perfil') {
+                  _mostrarDialogoEditarPerfil();
+                } else if (value == 'cerrar_sesion') {
+                  _cerrarSesion();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'perfil',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.person, color: Colors.blue),
+                      SizedBox(width: 10),
+                      Text('Editar Perfil'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'cerrar_sesion',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.logout, color: Colors.red),
+                      SizedBox(width: 10),
+                      Text('Cerrar Sesión'),
+                    ],
+                  ),
+                ),
+              ],
+              child: CircleAvatar(
+                backgroundColor: Colors.blue.shade100,
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.blue,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      drawer: menuItems.isNotEmpty ? _construirMenuLateral() : null,
+      body: widget.child,
+    );
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/login.dart';
 import 'screens/principal.dart';
 import 'widgets/widgets.dart';
+import 'screens/mi_perfil.dart';
 
 void main() {
   runApp(const MyApp());
@@ -52,9 +53,10 @@ class _MyAppState extends State<MyApp> {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: _cargando
-          ? const _PantallaCarga()
-          : _sesionIniciada
+      home:
+          _cargando
+              ? const _PantallaCarga()
+              : _sesionIniciada
               ? const _PantallaPrincipal()
               : const LoginScreen(),
       routes: {
@@ -62,6 +64,7 @@ class _MyAppState extends State<MyApp> {
         '/principal': (context) => const _PantallaPrincipal(),
         '/reportes': (context) => const _PantallaReportes(),
         '/configuracion': (context) => const _PantallaConfiguracion(),
+        '/mi_perfil': (context) => const MiPerfil(),
       },
     );
   }
@@ -73,11 +76,7 @@ class _PantallaCarga extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -93,25 +92,16 @@ class _PantallaPrincipal extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.home,
-              size: 100,
-              color: Colors.blue,
-            ),
+            const Icon(Icons.home, size: 100, color: Colors.blue),
             const SizedBox(height: 20),
             const Text(
               'Bienvenido al Sistema de Reportes',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             const Text(
               'Selecciona una opción del menú lateral',
-              style: TextStyle(
-                fontSize: 16,
-              ),
+              style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 30),
             ElevatedButton(
@@ -143,10 +133,7 @@ class _PantallaReportes extends StatelessWidget {
           children: [
             const Text(
               'Listado de Reportes',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -166,7 +153,9 @@ class _PantallaReportes extends StatelessWidget {
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Ver detalles del reporte ${index + 1}'),
+                            content: Text(
+                              'Ver detalles del reporte ${index + 1}',
+                            ),
                             duration: const Duration(seconds: 1),
                           ),
                         );
@@ -199,10 +188,7 @@ class _PantallaConfiguracion extends StatelessWidget {
           children: [
             const Text(
               'Configuración del Sistema',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
             const ListTile(

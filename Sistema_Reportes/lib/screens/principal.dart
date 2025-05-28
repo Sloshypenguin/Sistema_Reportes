@@ -13,7 +13,7 @@ class principalScreen extends StatefulWidget {
 
 class _principalScreenState extends State<principalScreen> {
   final storage = FlutterSecureStorage();
-  
+
   // Datos del usuario
   String nombreUsuario = 'Usuario';
   String correoUsuario = '';
@@ -31,7 +31,7 @@ class _principalScreenState extends State<principalScreen> {
   }
 
   /// Carga los datos del usuario desde el almacenamiento seguro
-  /// 
+  ///
   /// Obtiene toda la información necesaria para mostrar en la interfaz
   /// y para realizar operaciones como actualizar el perfil.
   Future<void> _cargarDatosUsuario() async {
@@ -45,13 +45,13 @@ class _principalScreenState extends State<principalScreen> {
       final roleIdStr = await storage.read(key: 'role_id');
       final esAdminStr = await storage.read(key: 'usuario_es_admin');
       final esEmpleadoStr = await storage.read(key: 'usuario_es_empleado');
-      
+
       // Actualizar el estado con los datos obtenidos
       setState(() {
         nombreUsuario = nombre ?? 'Usuario';
         correoUsuario = correo ?? '';
         rolUsuario = rol ?? 'Rol no disponible';
-        
+
         // Convertir valores numéricos y booleanos
         usuarioId = idStr != null ? int.tryParse(idStr) ?? 0 : 0;
         persId = persIdStr != null ? int.tryParse(persIdStr) ?? 0 : 0;
@@ -59,9 +59,11 @@ class _principalScreenState extends State<principalScreen> {
         esAdmin = esAdminStr == 'true';
         esEmpleado = esEmpleadoStr == 'true';
       });
-      
+
       debugPrint('Datos del usuario cargados correctamente');
-      debugPrint('Usuario ID: $usuarioId, Nombre: $nombreUsuario, Correo: $correoUsuario');
+      debugPrint(
+        'Usuario ID: $usuarioId, Nombre: $nombreUsuario, Correo: $correoUsuario',
+      );
     } catch (e) {
       debugPrint('Error al cargar datos del usuario: $e');
     }
@@ -169,7 +171,7 @@ class _principalScreenState extends State<principalScreen> {
   }
 
   /// Muestra un diálogo para editar el perfil del usuario
-  /// 
+  ///
   /// Utiliza el widget EditorPerfil para mostrar un diálogo que permite
   /// al usuario editar su nombre de usuario y correo electrónico.
   void _mostrarDialogoEditarPerfil() {
@@ -177,13 +179,15 @@ class _principalScreenState extends State<principalScreen> {
     if (usuarioId == 0 || persId == 0 || roleId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No se pudieron cargar los datos del usuario. Intente nuevamente más tarde.'),
+          content: Text(
+            'No se pudieron cargar los datos del usuario. Intente nuevamente más tarde.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
-    
+
     // Mostrar el diálogo de edición de perfil usando el widget reutilizable
     mostrarEditorPerfil(
       context,
@@ -313,6 +317,22 @@ class _principalScreenState extends State<principalScreen> {
               title: const Text('Configuración'),
               onTap: () {
                 Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Prueba'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/mi_perfil');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('reportes'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/principal');
               },
             ),
             const Divider(),
