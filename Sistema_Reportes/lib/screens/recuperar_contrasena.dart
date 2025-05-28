@@ -474,6 +474,7 @@ class _RecuperarContrasenaScreenState extends State<RecuperarContrasenaScreen> {
                                             : const Text(
                                               'Verificar Usuario',
                                               style: TextStyle(
+                                                color: Colors.white,
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -490,6 +491,7 @@ class _RecuperarContrasenaScreenState extends State<RecuperarContrasenaScreen> {
                                 const Text(
                                   'Verificar Código',
                                   style: TextStyle(
+                                      color: Colors.white,
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
                                   ),
