@@ -704,7 +704,8 @@ class _RecuperarContrasenaScreenState extends State<RecuperarContrasenaScreen> {
                                         milliseconds: 500,
                                       ),
                                     ),
-                                    (route) => false, // Borra todo el historial previo
+                                    (route) =>
+                                        false, // Borra todo el historial previo
                                   );
                                 },
                                 child: const Text(

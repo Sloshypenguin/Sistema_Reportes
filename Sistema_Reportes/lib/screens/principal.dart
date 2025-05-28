@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/login.dart';
-import '../services/usuarioService.dart';
-import '../services/connectivityService.dart';
+import '../widgets/widgets.dart'; // Importar todos los widgets
 
 class principalScreen extends StatefulWidget {
   const principalScreen({super.key});
@@ -14,8 +13,6 @@ class principalScreen extends StatefulWidget {
 
 class _principalScreenState extends State<principalScreen> {
   final storage = FlutterSecureStorage();
-  final UsuarioService _usuarioService = UsuarioService();
-  final ConnectivityService _connectivityService = ConnectivityService();
   
   // Datos del usuario
   String nombreUsuario = 'Usuario';
@@ -173,9 +170,8 @@ class _principalScreenState extends State<principalScreen> {
 
   /// Muestra un diálogo para editar el perfil del usuario
   /// 
-  /// Permite al usuario editar su nombre de usuario y correo electrónico.
-  /// Realiza validaciones básicas y envía los datos al servidor mediante
-  /// el servicio de usuario.
+  /// Utiliza el widget EditorPerfil para mostrar un diálogo que permite
+  /// al usuario editar su nombre de usuario y correo electrónico.
   void _mostrarDialogoEditarPerfil() {
     // Verificar si tenemos los datos necesarios
     if (usuarioId == 0 || persId == 0 || roleId == 0) {
@@ -188,278 +184,13 @@ class _principalScreenState extends State<principalScreen> {
       return;
     }
     
-    // Controladores para los campos de texto
-    final nombreController = TextEditingController(text: nombreUsuario);
-    final correoController = TextEditingController(text: correoUsuario);
-    
-    // Variables para controlar el estado de carga y errores
-    bool isLoading = false;
-    String? errorNombre;
-    String? errorCorreo;
-    
-    // Función para validar el correo electrónico
-    bool _esCorreoValido(String correo) {
-      final RegExp emailRegex = RegExp(
-        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-      );
-      return emailRegex.hasMatch(correo);
-    }
-    
-    // Función para actualizar el perfil
-    Future<void> _actualizarPerfil(BuildContext dialogContext) async {
-      // Validar campos
-      final nuevoNombre = nombreController.text.trim();
-      final nuevoCorreo = correoController.text.trim();
-      
-      // Validar nombre de usuario
-      if (nuevoNombre.isEmpty) {
-        setState(() {
-          errorNombre = 'El nombre de usuario no puede estar vacío';
-        });
-        return;
-      }
-      
-      // Validar correo electrónico
-      if (nuevoCorreo.isEmpty) {
-        setState(() {
-          errorCorreo = 'El correo electrónico no puede estar vacío';
-        });
-        return;
-      }
-      
-      if (!_esCorreoValido(nuevoCorreo)) {
-        setState(() {
-          errorCorreo = 'Por favor ingrese un correo electrónico válido';
-        });
-        return;
-      }
-      
-      // Verificar conectividad
-      final bool tieneConexion = await _connectivityService.hasConnection();
-      if (!tieneConexion) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      
-      // Mostrar indicador de carga
-      setState(() {
-        isLoading = true;
-      });
-      
-      try {
-        // Llamar al servicio para actualizar el usuario
-        final resultado = await _usuarioService.actualizarUsuario(
-          usuarioId: usuarioId,
-          usuario: nuevoNombre,
-          persId: persId,
-          roleId: roleId,
-          esAdmin: esAdmin,
-          usuarioModificacion: usuarioId, // El mismo usuario realiza la modificación
-          esEmpleado: esEmpleado,
-          correo: nuevoCorreo,
-        );
-        
-        // Verificar resultado
-        if (resultado['success'] == true) {
-          // Actualizar datos en el almacenamiento seguro
-          await storage.write(key: 'usuario_nombre', value: nuevoNombre);
-          await storage.write(key: 'usuario_correo', value: nuevoCorreo);
-          
-          // Actualizar estado
-          setState(() {
-            nombreUsuario = nuevoNombre;
-            correoUsuario = nuevoCorreo;
-            isLoading = false;
-          });
-          
-          // Cerrar diálogo y mostrar mensaje de éxito
-          if (!mounted) return;
-          Navigator.pop(dialogContext);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(resultado['message'] ?? 'Perfil actualizado correctamente'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          // Mostrar mensaje de error
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(resultado['message'] ?? 'No se pudo actualizar el perfil'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          setState(() {
-            isLoading = false;
-          });
-        }
-      } catch (e) {
-        // Manejar errores
-        debugPrint('Error al actualizar perfil: $e');
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ocurrió un error al actualizar tu perfil. Por favor, intenta nuevamente más tarde.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
-    
-    // Mostrar el diálogo
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Evitar que se cierre al tocar fuera del diálogo
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Editar Perfil',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),  
-                  const SizedBox(height: 20),
-                  // Avatar con opción para cambiar imagen (funcionalidad futura)
-                  Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.grey.shade200,
-                        child: Icon(
-                          Icons.person,
-                          size: 50,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Esta función estará disponible próximamente'),
-                              ),
-                            );
-                          },
-                          constraints: const BoxConstraints.tightFor(
-                            width: 40,
-                            height: 40,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Campo de nombre de usuario
-                  TextField(
-                    controller: nombreController,
-                    decoration: InputDecoration(
-                      labelText: 'Nombre de usuario',
-                      prefixIcon: const Icon(Icons.person),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      errorText: errorNombre,
-                    ),
-                    onChanged: (value) {
-                      // Limpiar error al escribir
-                      if (errorNombre != null) {
-                        setDialogState(() {
-                          errorNombre = null;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 15),
-                  // Campo de correo electrónico
-                  TextField(
-                    controller: correoController,
-                    decoration: InputDecoration(
-                      labelText: 'Correo electrónico',
-                      prefixIcon: const Icon(Icons.email),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      errorText: errorCorreo,
-                    ),
-                    onChanged: (value) {
-                      // Limpiar error al escribir
-                      if (errorCorreo != null) {
-                        setDialogState(() {
-                          errorCorreo = null;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  // Botones de acción
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      TextButton(
-                        onPressed: isLoading 
-                          ? null 
-                          : () => Navigator.pop(dialogContext),
-                        child: const Text(
-                          'Cancelar',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: isLoading 
-                          ? null 
-                          : () => _actualizarPerfil(dialogContext),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                        ),
-                        child: isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text(
-                              'Guardar',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    // Mostrar el diálogo de edición de perfil usando el widget reutilizable
+    mostrarEditorPerfil(
+      context,
+      onActualizacionExitosa: () {
+        // Recargar datos del usuario después de una actualización exitosa
+        _cargarDatosUsuario();
+      },
     );
   }
 
