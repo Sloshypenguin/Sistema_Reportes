@@ -1,38 +1,240 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/login.dart';
+import 'screens/principal.dart';
+import 'widgets/widgets.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final storage = FlutterSecureStorage();
+  bool _sesionIniciada = false;
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _verificarSesion();
+  }
+
+  /// Verifica si hay una sesión activa
+  Future<void> _verificarSesion() async {
+    try {
+      final token = await storage.read(key: 'usuario_token');
+      setState(() {
+        _sesionIniciada = token != null && token.isNotEmpty;
+        _cargando = false;
+      });
+    } catch (e) {
+      debugPrint('Error al verificar sesión: $e');
+      setState(() {
+        _sesionIniciada = false;
+        _cargando = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Sistema de Reportes',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(),
+      home: _cargando
+          ? const _PantallaCarga()
+          : _sesionIniciada
+              ? const _PantallaPrincipal()
+              : const LoginScreen(),
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/principal': (context) => const _PantallaPrincipal(),
+        '/reportes': (context) => const _PantallaReportes(),
+        '/configuracion': (context) => const _PantallaConfiguracion(),
+      },
+    );
+  }
+}
+
+/// Pantalla de carga mientras se verifica la sesión
+class _PantallaCarga extends StatelessWidget {
+  const _PantallaCarga();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+/// Pantalla principal que utiliza la plantilla base
+class _PantallaPrincipal extends StatelessWidget {
+  const _PantallaPrincipal();
+
+  @override
+  Widget build(BuildContext context) {
+    return PlantillaBase(
+      titulo: 'Página Principal',
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.home,
+              size: 100,
+              color: Colors.blue,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Bienvenido al Sistema de Reportes',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Selecciona una opción del menú lateral',
+              style: TextStyle(
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/reportes');
+              },
+              child: const Text('Ver Reportes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla de reportes que utiliza la plantilla base
+class _PantallaReportes extends StatelessWidget {
+  const _PantallaReportes();
+
+  @override
+  Widget build(BuildContext context) {
+    return PlantillaBase(
+      titulo: 'Reportes',
+      mostrarBotonRegresar: true,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Listado de Reportes',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: 10,
+                itemBuilder: (context, index) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue.shade100,
+                        child: Text('${index + 1}'),
+                      ),
+                      title: Text('Reporte #${index + 1}'),
+                      subtitle: Text('Descripción del reporte ${index + 1}'),
+                      trailing: const Icon(Icons.arrow_forward_ios),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Ver detalles del reporte ${index + 1}'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla de configuración que utiliza la plantilla base
+class _PantallaConfiguracion extends StatelessWidget {
+  const _PantallaConfiguracion();
+
+  @override
+  Widget build(BuildContext context) {
+    return PlantillaBase(
+      titulo: 'Configuración',
+      mostrarBotonRegresar: true,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Configuración del Sistema',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const ListTile(
+              leading: Icon(Icons.person, color: Colors.blue),
+              title: Text('Perfil de Usuario'),
+              subtitle: Text('Editar información de perfil'),
+              trailing: Icon(Icons.arrow_forward_ios),
+            ),
+            const Divider(),
+            const ListTile(
+              leading: Icon(Icons.notifications, color: Colors.orange),
+              title: Text('Notificaciones'),
+              subtitle: Text('Configurar notificaciones del sistema'),
+              trailing: Icon(Icons.arrow_forward_ios),
+            ),
+            const Divider(),
+            const ListTile(
+              leading: Icon(Icons.color_lens, color: Colors.purple),
+              title: Text('Apariencia'),
+              subtitle: Text('Personalizar la apariencia de la aplicación'),
+              trailing: Icon(Icons.arrow_forward_ios),
+            ),
+            const Divider(),
+            const ListTile(
+              leading: Icon(Icons.security, color: Colors.green),
+              title: Text('Seguridad'),
+              subtitle: Text('Configuración de seguridad y privacidad'),
+              trailing: Icon(Icons.arrow_forward_ios),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
