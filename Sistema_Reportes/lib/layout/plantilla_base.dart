@@ -168,35 +168,6 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Inicio'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/principal');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Mi Perfil'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/mi_perfil');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.assignment),
-              title: const Text('Reportes'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/reportes');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.widgets),
-              title: const Text('Plantilla Widget'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/plantilla');
-              },
-            ),
-
             ..._pantallas.map(
               (pantalla) => ListTile(
                 leading: Icon(pantalla.icono),
