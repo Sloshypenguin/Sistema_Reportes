@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sistema_reportes/models/pantallaViewModel.dart';
 import '../services/auth_service.dart';
 
 class PlantillaBase extends StatefulWidget {
@@ -20,11 +24,24 @@ class PlantillaBase extends StatefulWidget {
 class _PlantillaBaseState extends State<PlantillaBase> {
   String nombreUsuario = 'Usuario';
   String rolUsuario = 'Rol';
+  List<Pantalla> _pantallas = [];
 
   @override
   void initState() {
     super.initState();
     _cargarDatosUsuario();
+    _cargarPantallas();
+  }
+
+  Future<void> _cargarPantallas() async {
+    final storage = FlutterSecureStorage();
+    final pantallasJson = await storage.read(key: 'usuario_pantallas');
+    if (pantallasJson != null) {
+      final List<dynamic> lista = jsonDecode(pantallasJson);
+      setState(() {
+        _pantallas = lista.map((item) => Pantalla.fromJson(item)).toList();
+      });
+    }
   }
 
   Future<void> _cargarDatosUsuario() async {
@@ -151,33 +168,14 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Inicio'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/principal');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Mi Perfil'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/mi_perfil');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.assignment),
-              title: const Text('Reportes'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/reportes');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.widgets),
-              title: const Text('Plantilla Widget'),
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/plantilla');
-              },
+            ..._pantallas.map(
+              (pantalla) => ListTile(
+                leading: Icon(pantalla.icono),
+                title: Text(pantalla.nombre),
+                onTap: () {
+                  Navigator.pushReplacementNamed(context, pantalla.ruta);
+                },
+              ),
             ),
             const Divider(),
             ListTile(
