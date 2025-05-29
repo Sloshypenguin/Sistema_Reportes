@@ -8,23 +8,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:sistema_reportes/main.dart';
+import 'package:sistema_reportes/app/app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+  testWidgets('Verificar carga inicial de la aplicación', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.pumpWidget(const App());
+    
+    // Verificar que se muestra el indicador de carga mientras se verifica la sesión
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Iniciando aplicación...'), findsOneWidget);
+    
+    // Permitir que la verificación de sesión se complete (simulación)
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+    
+    // Nota: Las verificaciones adicionales dependerán de la lógica específica
+    // de tu aplicación y del estado de la sesión durante la prueba.
   });
 }

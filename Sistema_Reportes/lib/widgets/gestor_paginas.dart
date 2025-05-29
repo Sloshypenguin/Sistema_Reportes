@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../widgets/plantilla_base.dart';
+import '../services/auth_service.dart';
+import '../layout/plantilla_base.dart';
 import '../screens/login.dart';
 import '../screens/principal.dart';
 
@@ -23,7 +23,6 @@ class GestorPaginas extends StatefulWidget {
 }
 
 class _GestorPaginasState extends State<GestorPaginas> {
-  final storage = FlutterSecureStorage();
   String _rutaActual = '/';
   bool _sesionIniciada = false;
   
@@ -40,9 +39,9 @@ class _GestorPaginasState extends State<GestorPaginas> {
   /// Verifica si hay una sesión activa
   Future<void> _verificarSesion() async {
     try {
-      final token = await storage.read(key: 'usuario_token');
+      final sesionActiva = await AuthService.verificarSesionActiva();
       setState(() {
-        _sesionIniciada = token != null && token.isNotEmpty;
+        _sesionIniciada = sesionActiva;
         
         // Si no hay sesión, redirigir a login
         if (!_sesionIniciada && _rutaActual != '/login') {
@@ -53,8 +52,8 @@ class _GestorPaginasState extends State<GestorPaginas> {
       debugPrint('Error al verificar sesión: $e');
       setState(() {
         _sesionIniciada = false;
-        _navegar('/login');
       });
+      _navegar('/login');
     }
   }
   
@@ -82,7 +81,7 @@ class _GestorPaginasState extends State<GestorPaginas> {
         return const LoginScreen();
       case '/':
       case '/principal':
-        return const principalScreen();
+        return const PrincipalScreen();
       // Aquí se añadirían más rutas según se vayan creando las páginas
       default:
         // Si la ruta no existe, mostrar página de error 404

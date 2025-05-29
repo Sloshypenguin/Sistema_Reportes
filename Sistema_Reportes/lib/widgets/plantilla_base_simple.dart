@@ -4,20 +4,20 @@ import '../screens/login.dart';
 import 'editor_perfil.dart';
 
 /// Widget que proporciona la estructura base de la aplicación
-/// 
+///
 /// Este widget implementa el layout principal de la aplicación, similar
 /// a una aplicación Angular, con una barra superior, menú lateral y
 /// área de contenido donde se muestran las diferentes páginas.
 class PlantillaBase extends StatefulWidget {
   /// Widget hijo que se mostrará en el área de contenido
   final Widget child;
-  
+
   /// Título que se mostrará en la barra superior
   final String titulo;
-  
+
   /// Indica si se debe mostrar el botón de regreso
   final bool mostrarBotonRegresar;
-  
+
   /// Constructor del widget
   const PlantillaBase({
     Key? key,
@@ -32,23 +32,23 @@ class PlantillaBase extends StatefulWidget {
 
 class _PlantillaBaseState extends State<PlantillaBase> {
   final storage = FlutterSecureStorage();
-  
+
   // Datos del usuario
   String nombreUsuario = 'Usuario';
   String rolUsuario = 'Rol no disponible';
-  
+
   @override
   void initState() {
     super.initState();
     _cargarDatosUsuario();
   }
-  
+
   /// Carga los datos del usuario desde el almacenamiento seguro
   Future<void> _cargarDatosUsuario() async {
     try {
       final nombre = await storage.read(key: 'usuario_nombre');
       final rol = await storage.read(key: 'usuario_rol');
-      
+
       setState(() {
         nombreUsuario = nombre ?? 'Usuario';
         rolUsuario = rol ?? 'Rol no disponible';
@@ -57,38 +57,37 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       debugPrint('Error al cargar datos del usuario: $e');
     }
   }
-  
+
   /// Cierra la sesión del usuario
   Future<void> _cerrarSesion() async {
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Cerrar sesión'),
+            content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text(
+                  'Cerrar sesión',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text(
-              'Cerrar sesión',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
     );
-    
+
     if (confirmar == true) {
       try {
         // Limpiar datos de sesión
         await storage.deleteAll();
-        
+
         // Navegar a la pantalla de inicio de sesión
         if (!mounted) return;
         Navigator.pushAndRemoveUntil(
@@ -100,12 +99,14 @@ class _PlantillaBaseState extends State<PlantillaBase> {
         debugPrint('Error al cerrar sesión: $e');
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al cerrar sesión. Intente nuevamente.')),
+          const SnackBar(
+            content: Text('Error al cerrar sesión. Intente nuevamente.'),
+          ),
         );
       }
     }
   }
-  
+
   /// Muestra el diálogo para editar el perfil del usuario
   void _mostrarDialogoEditarPerfil() {
     mostrarEditorPerfil(
@@ -116,18 +117,19 @@ class _PlantillaBaseState extends State<PlantillaBase> {
       },
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.titulo),
-        leading: widget.mostrarBotonRegresar 
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
-            )
-          : null,
+        leading:
+            widget.mostrarBotonRegresar
+                ? IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+                : null,
         actions: [
           // Avatar de perfil con menú desplegable
           Padding(
@@ -144,32 +146,35 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                   _cerrarSesion();
                 }
               },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'perfil',
-                  child: Row(
-                    children: const [
-                      Icon(Icons.person, color: Colors.blue),
-                      SizedBox(width: 10),
-                      Text('Editar Perfil'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'cerrar_sesion',
-                  child: Row(
-                    children: const [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 10),
-                      Text('Cerrar Sesión'),
-                    ],
-                  ),
-                ),
-              ],
+              itemBuilder:
+                  (context) => [
+                    PopupMenuItem(
+                      value: 'perfil',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.person, color: Colors.blue),
+                          SizedBox(width: 10),
+                          Text('Editar Perfil'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'cerrar_sesion',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.logout, color: Colors.red),
+                          SizedBox(width: 10),
+                          Text('Cerrar Sesión'),
+                        ],
+                      ),
+                    ),
+                  ],
               child: CircleAvatar(
                 backgroundColor: Colors.blue.shade100,
                 child: Text(
-                  nombreUsuario.isNotEmpty ? nombreUsuario[0].toUpperCase() : 'U',
+                  nombreUsuario.isNotEmpty
+                      ? nombreUsuario[0].toUpperCase()
+                      : 'U',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.blue.shade800,
@@ -194,14 +199,14 @@ class _PlantillaBaseState extends State<PlantillaBase> {
               ),
               accountEmail: Text(
                 rolUsuario,
-                style: const TextStyle(
-                  fontSize: 14,
-                ),
+                style: const TextStyle(fontSize: 14),
               ),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Text(
-                  nombreUsuario.isNotEmpty ? nombreUsuario[0].toUpperCase() : 'U',
+                  nombreUsuario.isNotEmpty
+                      ? nombreUsuario[0].toUpperCase()
+                      : 'U',
                   style: TextStyle(
                     fontSize: 40,
                     fontWeight: FontWeight.bold,
@@ -209,11 +214,9 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                   ),
                 ),
               ),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade700,
-              ),
+              decoration: BoxDecoration(color: Colors.blue.shade700),
             ),
-            
+
             // Opciones del menú
             ListTile(
               leading: Icon(Icons.home, color: Colors.blue.shade700),
@@ -239,25 +242,27 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                 Navigator.pushNamed(context, '/configuracion');
               },
             ),
-            
+            ListTile(
+              leading: Icon(Icons.settings, color: Colors.blue.shade700),
+              title: const Text('Mi perfil'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/mi_perfil');
+              },
+            ),
             const Spacer(),
-            
+
             // Pie del drawer con información de la aplicación
             Container(
               padding: const EdgeInsets.all(16),
               color: Colors.grey.shade200,
               child: Row(
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.blue.shade700,
-                  ),
+                  Icon(Icons.info_outline, color: Colors.blue.shade700),
                   const SizedBox(width: 10),
                   const Text(
                     'Sistema de Reportes v1.0',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
