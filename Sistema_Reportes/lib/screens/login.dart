@@ -10,11 +10,8 @@
 // =============================================================================
 
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../services/usuarioService.dart';
-import '../models/usuarioViewModel.dart';
+import '../services/auth_service.dart';
 import 'Registrarse.dart';
-import 'principal.dart';
 import 'recuperar_contrasena.dart';
 
 /// Widget principal de la pantalla de login.
@@ -44,9 +41,6 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Clave global para acceder y validar el formulario
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
 
-  /// Servicio para realizar operaciones de autenticación con la API
-  final UsuarioService _usuarioService = UsuarioService();
-
   /// Indica si se está procesando la solicitud de inicio de sesión
   bool _cargando = false;
 
@@ -56,9 +50,6 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Controla si se debe mantener la sesión activa después de cerrar la app
   /// Por defecto es true para mejor experiencia de usuario
   bool _mantenerSesion = true;
-
-  /// Instancia de FlutterSecureStorage para almacenar datos de forma segura
-  final storage = FlutterSecureStorage();
 
   /// Se ejecuta cuando el widget se inserta en el árbol de widgets
   ///
@@ -98,9 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     try {
-      final sesionActiva = await storage.read(key: 'sesion_activa');
+      final sesionActiva = await AuthService.verificarSesionActiva();
 
-      if (sesionActiva == 'true') {
+      if (sesionActiva) {
         // Verificamos nuevamente que el widget siga montado antes de navegar
         if (!mounted) return;
 
@@ -108,91 +99,16 @@ class _LoginScreenState extends State<LoginScreen> {
         // Usamos Future.microtask para asegurar que la navegación ocurre
         // fuera del ciclo actual de construcción
         Future.microtask(() {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const principalScreen()),
-          );
+          Navigator.pushReplacementNamed(context, '/principal');
         });
       }
     } catch (e) {
-      print('Error al verificar la sesión: $e');
+      debugPrint('Error al verificar la sesión: $e');
       // Si hay un error, simplemente continuamos con la pantalla de login
     }
   }
 
-  /// Almacena los datos del usuario en el almacenamiento seguro
-  ///
-  /// Este método guarda la información del usuario autenticado en el
-  /// almacenamiento seguro (FlutterSecureStorage) para poder acceder a ella
-  /// posteriormente sin necesidad de volver a iniciar sesión.
-  ///
-  /// Guarda los siguientes datos:
-  /// - ID del usuario
-  /// - Nombre de usuario
-  /// - Token de autenticación
-  /// - Rol del usuario
-  /// - Estado de administrador
-  /// - Pantallas disponibles (si existen)
-  /// - Información del empleado (si existe)
-  /// - Estado de la sesión activa (según la elección del usuario)
-  /// - Datos adicionales necesarios para operaciones como actualización de perfil
-  ///
-  /// @param usuario Objeto Usuario con los datos a guardar
-  Future<void> _guardarDatosUsuario(Usuario usuario) async {
-    try {
-      // Guardar información básica del usuario
-      await storage.write(key: 'usuario_id', value: usuario.usua_Id.toString());
-      await storage.write(key: 'usuario_nombre', value: usuario.usua_Usuario);
-      await storage.write(key: 'usuario_token', value: usuario.usua_Token);
-      await storage.write(key: 'usuario_rol', value: usuario.role_Nombre);
-      await storage.write(
-        key: 'usuario_es_admin',
-        value: usuario.usua_EsAdmin.toString(),
-      );
-
-      // Guardar IDs importantes para operaciones de actualización
-      await storage.write(key: 'pers_id', value: usuario.pers_Id.toString());
-      await storage.write(key: 'role_id', value: usuario.role_Id.toString());
-
-      // Guardar correo electrónico
-      if (usuario.pers_Correo != null) {
-        await storage.write(key: 'usuario_correo', value: usuario.pers_Correo);
-      }
-
-      // Guardar estado de empleado
-      await storage.write(
-        key: 'usuario_es_empleado',
-        value: usuario.usua_EsEmpleado.toString(),
-      );
-
-      // Guardar nombre de empleado si existe
-      if (usuario.empleado != null) {
-        await storage.write(key: 'usuario_empleado', value: usuario.empleado);
-      }
-
-      // Guardar pantallas si están disponibles
-      if (usuario.pantallas != null) {
-        await storage.write(key: 'usuario_pantallas', value: usuario.pantallas);
-      }
-
-      // Guardar información adicional que pueda ser útil
-      if (usuario.empleado != null) {
-        await storage.write(key: 'usuario_empleado', value: usuario.empleado);
-      }
-
-      // Guardar estado de sesión activa según la elección del usuario
-      await storage.write(
-        key: 'sesion_activa',
-        value: _mantenerSesion ? 'true' : 'false',
-      );
-
-      print('Datos del usuario guardados correctamente');
-      print('Mantener sesión activa: $_mantenerSesion');
-    } catch (e) {
-      print('Error al guardar datos del usuario: $e');
-      // No lanzamos la excepción para no interrumpir el flujo
-    }
-  }
+  // Este método ya no es necesario, se ha movido al AuthService
 
   /// Maneja el proceso de inicio de sesión
   ///
@@ -202,7 +118,6 @@ class _LoginScreenState extends State<LoginScreen> {
   /// 2. Muestra un indicador de carga
   /// 3. Llama al servicio de autenticación con las credenciales ingresadas
   /// 4. Si la autenticación es exitosa:
-  ///    - Guarda los datos del usuario en el almacenamiento seguro
   ///    - Muestra un mensaje de éxito
   ///    - Navega a la pantalla principal
   /// 5. Si la autenticación falla, muestra un mensaje de error amigable
@@ -221,24 +136,18 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Llamar al servicio de autenticación
-      final Usuario? usuario = await _usuarioService.login(
-        _usuarioController.text.trim(),
-        _contrasenaController.text.trim(),
+      // Llamar al servicio de autenticación centralizado
+      final usuario = await AuthService.iniciarSesion(
+        usuario: _usuarioController.text,
+        contrasena: _contrasenaController.text,
+        mantenerSesion: _mantenerSesion,
       );
 
       // Verificar nuevamente que el widget siga montado
       if (!mounted) return;
 
       // Verificar si la autenticación fue exitosa
-      if (usuario != null &&
-          (usuario.code_Status == 1 || usuario.code_Status == null)) {
-        // Guardar datos del usuario en el almacenamiento seguro
-        await _guardarDatosUsuario(usuario);
-
-        // Verificar nuevamente que el widget siga montado
-        if (!mounted) return;
-
+      if (usuario != null) {
         // Mostrar mensaje de éxito
         setState(() {
           _mensaje = 'Inicio de sesión exitoso';
@@ -248,10 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // fuera del ciclo actual de construcción y evitar errores
         Future.microtask(() {
           if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const principalScreen()),
-            );
+            Navigator.pushReplacementNamed(context, '/principal');
           }
         });
       } else {
@@ -272,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       // Imprimir el error técnico en la consola para depuración
-      print('Error técnico durante el inicio de sesión: $e');
+      debugPrint('Error técnico durante el inicio de sesión: $e');
     } finally {
       // Verificar que el widget siga montado antes de actualizar el estado
       if (mounted) {

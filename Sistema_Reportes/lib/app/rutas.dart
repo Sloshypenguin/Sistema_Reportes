@@ -1,0 +1,56 @@
+import 'package:flutter/material.dart';
+import '../screens/login.dart';
+import '../screens/principal.dart';
+import '../screens/mi_perfil.dart';
+// import '../screens/reportes.dart';
+import '../layout/plantilla_base.dart';
+import '../widgets/plantilla_widget.dart';
+
+Route<dynamic> generarRuta(RouteSettings settings) {
+  Widget pagina;
+
+  switch (settings.name) {
+    case '/':
+    case '/login':
+      pagina = const LoginScreen();
+      break;
+
+    case '/principal':
+      pagina = const PlantillaBase(
+        titulo: 'Página Principal',
+        mostrarBotonRegresar: false,
+        child: PrincipalScreen(),
+      );
+      break;
+
+    case '/mi_perfil':
+      pagina = const PlantillaBase(
+        titulo: 'Mi Perfil',
+        mostrarBotonRegresar: true,
+        child: MiPerfil(titulo: 'Mi Perfil'),
+      );
+      break;
+
+    // case '/reportes':
+    //   pagina = const PlantillaBase(
+    //     child: Reportes(),
+    //   );
+    //   break;
+
+    case '/plantilla':
+      pagina = const PlantillaBase(
+        titulo: 'Plantilla Widget',
+        mostrarBotonRegresar: true,
+        child: PlantillaWidget(titulo: 'Ejemplo de Plantilla'),
+      );
+      break;
+
+    default:
+      pagina = Scaffold(
+        appBar: AppBar(title: const Text('Ruta no encontrada')),
+        body: const Center(child: Text('404 - Página no encontrada')),
+      );
+  }
+
+  return MaterialPageRoute(builder: (_) => pagina, settings: settings);
+}
