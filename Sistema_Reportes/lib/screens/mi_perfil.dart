@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import 'editar_perfil.dart';
 
 class MiPerfil extends StatefulWidget {
   final String titulo;
@@ -15,6 +17,34 @@ class MiPerfil extends StatefulWidget {
 }
 
 class _MiPerfilState extends State<MiPerfil> {
+  String nombreUsuario = 'Usuario';
+  String rolUsuario = 'Rol';
+  String? imagenPerfil;
+  String correoUsuario = '';
+  
+  @override
+  void initState() {
+    super.initState();
+    _cargarDatosUsuario();
+  }
+  
+  Future<void> _cargarDatosUsuario() async {
+    final nombre = await AuthService.obtenerNombreUsuario() ?? 'Usuario';
+    final rol = await AuthService.obtenerRol() ?? 'Rol';
+    final imagen = await AuthService.obtenerImagenPerfil();
+    final correo = await AuthService.obtenerCorreoUsuario() ?? '';
+    
+    setState(() {
+      nombreUsuario = nombre;
+      rolUsuario = rol;
+      imagenPerfil = imagen;
+      correoUsuario = correo;
+      
+      if (imagenPerfil != null) {
+        debugPrint('Imagen de perfil cargada en mi_perfil: $imagenPerfil');
+      }
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -37,38 +67,61 @@ class _MiPerfilState extends State<MiPerfil> {
                   ),
                 ),
               ),
-              const Positioned(
+              Positioned(
                 bottom: -50, // sobresale hacia abajo
                 child: CircleAvatar(
                   radius: 50,
                   backgroundColor: Colors.white,
                   child: CircleAvatar(
                     radius: 46,
-                    backgroundImage: AssetImage(
-                      'assets/images/logoAcademiaSL.png',
-                    ),
+                    // Mostrar imagen de perfil si está disponible, de lo contrario mostrar una imagen predeterminada
+                    backgroundImage: imagenPerfil != null
+                        ? NetworkImage('http://sistemareportesgob.somee.com${imagenPerfil}')
+                        : const AssetImage('assets/images/logoAcademiaSL.png') as ImageProvider,
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 60), // espacio extra por el overlap
-          // Nombre y usuario
-          const Text(
-            'Juan Pérez',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          // Nombre y usuario con botón de edición
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                nombreUsuario,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 10),
+              IconButton(
+                icon: const Icon(Icons.settings, color: Colors.blue),
+                tooltip: 'Editar perfil',
+                onPressed: () {
+                  // Navegar a la pantalla de edición de perfil
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditarPerfilScreen(),
+                    ),
+                  ).then((_) {
+                    // Recargar datos cuando regrese de la pantalla de edición
+                    _cargarDatosUsuario();
+                  });
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 4),
-          const Text('@juanperez', style: TextStyle(color: Colors.grey)),
+          Text('@$nombreUsuario', style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
 
           // Info adicional
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Column(
               children: [
-                Text('Rol: Administrador'),
-                Text('Correo: juan.perez@email.com'),
+                Text('Rol: $rolUsuario'),
+                Text('Correo: $correoUsuario'),
               ],
             ),
           ),

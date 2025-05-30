@@ -17,6 +17,7 @@ class Usuario {
   final String? role_Nombre;  
   final String? pantallas;
   final String? pers_Correo;
+  final String? usua_Imagen; // Ruta de la imagen de perfil
   final int?    code_Status;
   final String? message_Status;
 
@@ -39,6 +40,7 @@ class Usuario {
     this.role_Nombre, 
     this.pantallas,
     this.pers_Correo,
+    this.usua_Imagen, // Añadido campo para la imagen
     this.code_Status,
     this.message_Status,
   });
@@ -63,6 +65,7 @@ class Usuario {
       role_Nombre: json['role_Nombre'],
       pantallas: json['pantallas'],
       pers_Correo: json['pers_Correo'],
+      usua_Imagen: json['usua_Imagen'], // Añadido campo para la imagen
       code_Status: json['code_Status'],
       message_Status: json['message_Status'],
     );

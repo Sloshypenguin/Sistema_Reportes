@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../config/api_config.dart';
 import '../services/usuarioService.dart';
 import '../services/connectivityService.dart';
+import '../services/auth_service.dart';
 
 /// Widget para editar el perfil del usuario
 ///
@@ -32,6 +38,12 @@ class _EditorPerfilState extends State<EditorPerfil> {
   bool _isLoading = false;
   String? _errorNombre;
   String? _errorCorreo;
+  
+  // Variables para la imagen de perfil
+  final ImagePicker _picker = ImagePicker();
+  File? _imagenPerfil;
+  bool _subiendoImagen = false;
+  String? _rutaImagenPerfil; // Ruta de la imagen en el servidor
 
   // Datos del usuario
   String _nombreUsuario = '';
@@ -41,6 +53,7 @@ class _EditorPerfilState extends State<EditorPerfil> {
   int _roleId = 0;
   bool _esAdmin = false;
   bool _esEmpleado = false;
+  String? _imagenPerfilActual; // Ruta actual de la imagen de perfil
 
   @override
   void initState() {
@@ -66,11 +79,13 @@ class _EditorPerfilState extends State<EditorPerfil> {
       final roleIdStr = await _storage.read(key: 'role_id');
       final esAdminStr = await _storage.read(key: 'usuario_es_admin');
       final esEmpleadoStr = await _storage.read(key: 'usuario_es_empleado');
+      final imagenPerfil = await _storage.read(key: 'usuario_imagen');
 
       if (mounted) {
         setState(() {
           _nombreUsuario = nombre ?? 'Usuario';
           _correoUsuario = correo ?? '';
+          _imagenPerfilActual = imagenPerfil;
 
           // Actualizar controladores
           _nombreController.text = _nombreUsuario;
@@ -82,6 +97,13 @@ class _EditorPerfilState extends State<EditorPerfil> {
           _roleId = roleIdStr != null ? int.tryParse(roleIdStr) ?? 0 : 0;
           _esAdmin = esAdminStr == 'true';
           _esEmpleado = esEmpleadoStr == 'true';
+          
+          // Inicializar la ruta de la imagen con la actual
+          _rutaImagenPerfil = _imagenPerfilActual;
+          
+          if (_imagenPerfilActual != null) {
+            debugPrint('Imagen de perfil actual cargada: $_imagenPerfilActual');
+          }
         });
       }
 
@@ -97,6 +119,134 @@ class _EditorPerfilState extends State<EditorPerfil> {
       r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
     );
     return emailRegex.hasMatch(correo);
+  }
+
+  /// Selecciona una imagen desde la galería
+  Future<void> _seleccionarImagenDesdeGaleria() async {
+    try {
+      final XFile? imagen = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80, // Calidad de la imagen (0-100)
+        maxWidth: 800, // Ancho máximo
+      );
+
+      if (imagen != null) {
+        setState(() {
+          _imagenPerfil = File(imagen.path);
+          _rutaImagenPerfil = null; // Resetear la ruta cuando se selecciona una nueva imagen
+        });
+
+        // Subir la imagen inmediatamente
+        await _subirImagenAlServidor();
+      }
+    } catch (e) {
+      _mostrarMensajeError('Error al seleccionar imagen: $e');
+    }
+  }
+
+  /// Toma una foto con la cámara
+  Future<void> _tomarFoto() async {
+    try {
+      final XFile? imagen = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 800,
+      );
+
+      if (imagen != null) {
+        setState(() {
+          _imagenPerfil = File(imagen.path);
+          _rutaImagenPerfil = null;
+        });
+
+        // Subir la imagen inmediatamente
+        await _subirImagenAlServidor();
+      }
+    } catch (e) {
+      _mostrarMensajeError('Error al tomar foto: $e');
+    }
+  }
+
+  /// Sube la imagen seleccionada al servidor
+  Future<void> _subirImagenAlServidor() async {
+    if (_imagenPerfil == null) {
+      _mostrarMensajeError('Por favor seleccione una imagen primero');
+      return;
+    }
+
+    try {
+      setState(() {
+        _subiendoImagen = true;
+      });
+
+      // Crear un request multipart
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/Usuarios/SubirImagen'),
+      );
+
+      // Añadir la API key en los headers
+      request.headers['X-API-KEY'] = ApiConfig.apiKey;
+
+      // Añadir la imagen al request
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'imagen', // nombre del parámetro que espera el servidor
+          _imagenPerfil!.path,
+        ),
+      );
+
+      // Enviar el request
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        // Convertir la respuesta a string
+        final respuestaString = await response.stream.bytesToString();
+        final respuestaJson = json.decode(respuestaString);
+
+        // Guardar la ruta de la imagen
+        setState(() {
+          _rutaImagenPerfil = respuestaJson['ruta'];
+          _subiendoImagen = false;
+        });
+
+        _mostrarMensajeExito('Imagen subida correctamente');
+      } else {
+        setState(() {
+          _subiendoImagen = false;
+        });
+        _mostrarMensajeError('Error al subir imagen: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _subiendoImagen = false;
+      });
+      _mostrarMensajeError('Error al subir imagen: $e');
+    }
+  }
+
+  /// Muestra un mensaje de error
+  void _mostrarMensajeError(String mensaje) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  /// Muestra un mensaje de éxito
+  void _mostrarMensajeExito(String mensaje) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   /// Actualiza el perfil del usuario
@@ -160,6 +310,7 @@ class _EditorPerfilState extends State<EditorPerfil> {
             _usuarioId, // El mismo usuario realiza la modificación
         esEmpleado: _esEmpleado,
         correo: nuevoCorreo,
+        usua_Imagen: _rutaImagenPerfil ?? _imagenPerfilActual, // Usar la nueva imagen o mantener la actual
       );
 
       // Verificar resultado
@@ -167,12 +318,19 @@ class _EditorPerfilState extends State<EditorPerfil> {
         // Actualizar datos en el almacenamiento seguro
         await _storage.write(key: 'usuario_nombre', value: nuevoNombre);
         await _storage.write(key: 'usuario_correo', value: nuevoCorreo);
+        
+        // Actualizar la imagen de perfil si se ha cambiado
+        if (_rutaImagenPerfil != null && _rutaImagenPerfil != _imagenPerfilActual) {
+          await _storage.write(key: 'usuario_imagen', value: _rutaImagenPerfil);
+          debugPrint('Imagen de perfil actualizada: $_rutaImagenPerfil');
+        }
 
         // Actualizar estado
         if (mounted) {
           setState(() {
             _nombreUsuario = nuevoNombre;
             _correoUsuario = nuevoCorreo;
+            _imagenPerfilActual = _rutaImagenPerfil ?? _imagenPerfilActual;
             _isLoading = false;
           });
         }
@@ -241,40 +399,61 @@ class _EditorPerfilState extends State<EditorPerfil> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              // Avatar con opción para cambiar imagen (funcionalidad futura)
+              // Avatar con opción para cambiar imagen
               Stack(
                 children: [
                   CircleAvatar(
-                    radius: 40,
+                    radius: 50,
                     backgroundColor: Colors.grey.shade200,
-                    child: Icon(
-                      Icons.person,
-                      size: 50,
-                      color: Colors.blue.shade700,
-                    ),
+                    // Mostrar imagen seleccionada, imagen actual o icono predeterminado
+                    backgroundImage: _imagenPerfil != null
+                        ? FileImage(_imagenPerfil!)
+                        : (_imagenPerfilActual != null
+                            ? NetworkImage('http://sistemareportesgob.somee.com${_imagenPerfilActual}')
+                            : null) as ImageProvider?,
+                    child: _subiendoImagen
+                        ? const CircularProgressIndicator()
+                        : (_imagenPerfil == null && _imagenPerfilActual == null
+                            ? Icon(
+                                Icons.person,
+                                size: 50,
+                                color: Colors.blue.shade700,
+                              )
+                            : null),
                   ),
                   Positioned(
                     right: 0,
                     bottom: 0,
-                    child: CircleAvatar(
-                      radius: 15,
-                      backgroundColor: Colors.blue,
-                      child: InkWell(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Esta función estará disponible próximamente',
-                              ),
+                    child: Row(
+                      children: [
+                        // Botón para tomar foto
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.green,
+                          child: InkWell(
+                            onTap: _tomarFoto,
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 18,
                             ),
-                          );
-                        },
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 15,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        // Botón para seleccionar de galería
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.blue,
+                          child: InkWell(
+                            onTap: _seleccionarImagenDesdeGaleria,
+                            child: const Icon(
+                              Icons.photo_library,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:country_code_picker/country_code_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 import '../services/usuarioService.dart';
 import '../services/estadoCivilService.dart';
@@ -15,8 +19,6 @@ import '../models/estadoCivilViewModel.dart';
 import '../models/departamentoViewModel.dart';
 import '../models/municipioViewModel.dart';
 import '../screens/login.dart';
-
-
 
 // Claves para SharedPreferences
 const String kEstadosCivilesKey = 'estados_civiles_cache';
@@ -31,20 +33,18 @@ class RegistrarseScreen extends StatefulWidget {
   const RegistrarseScreen({super.key});
 
   @override
-  
   State<RegistrarseScreen> createState() => _RegistroScreenState();
 }
+
 final _dniFormatter = MaskTextInputFormatter(
   mask: '####-####-#####',
-  filter: { "#": RegExp(r'[0-9]') },
+  filter: {"#": RegExp(r'[0-9]')},
 );
 
 final _telefonoFormatter = MaskTextInputFormatter(
   mask: '####-####',
-  filter: { "#": RegExp(r'[0-9]') },
+  filter: {"#": RegExp(r'[0-9]')},
 );
-
-
 
 class _RegistroScreenState extends State<RegistrarseScreen> {
   final GlobalKey<FormState> _formkey = GlobalKey<FormState>();
@@ -53,7 +53,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   final ConnectivityService _connectivityService = ConnectivityService();
   final DepartamentoService _departamentoService = DepartamentoService();
   final MunicipioService _municipioService = MunicipioService();
-  
+  final ImagePicker _picker = ImagePicker(); // Para seleccionar imágenes
+
   String _codigoPais = '+504'; // Honduras por defecto
   String _codigoIsoPais = 'HN'; // Código ISO de Honduras
   MaskTextInputFormatter? _telefonoFormatterDinamico;
@@ -66,72 +67,206 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   String? _municipioSeleccionado;
   bool _cargandoMunicipios = false;
 
+  // Variables para la imagen de perfil
+  File? _imagenPerfil;
+  bool _subiendoImagen = false;
+  String? _rutaImagenPerfil; // Ruta de la imagen en el servidor
+
+  /// Selecciona una imagen desde la galería
+  Future<void> _seleccionarImagenDesdeGaleria() async {
+    try {
+      final XFile? imagen = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80, // Calidad de la imagen (0-100)
+        maxWidth: 800, // Ancho máximo
+      );
+
+      if (imagen != null) {
+        setState(() {
+          _imagenPerfil = File(imagen.path);
+          _rutaImagenPerfil =
+              null; // Resetear la ruta cuando se selecciona una nueva imagen
+        });
+
+        // Subir la imagen inmediatamente
+        await _subirImagenAlServidor();
+      }
+    } catch (e) {
+      _mostrarMensajeError('Error al seleccionar imagen: $e');
+    }
+  }
+
+  /// Toma una foto con la cámara
+  Future<void> _tomarFoto() async {
+    try {
+      final XFile? imagen = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 800,
+      );
+
+      if (imagen != null) {
+        setState(() {
+          _imagenPerfil = File(imagen.path);
+          _rutaImagenPerfil = null;
+        });
+
+        // Subir la imagen inmediatamente
+        await _subirImagenAlServidor();
+      }
+    } catch (e) {
+      _mostrarMensajeError('Error al tomar foto: $e');
+    }
+  }
+
+  /// Sube la imagen seleccionada al servidor
+  Future<void> _subirImagenAlServidor() async {
+    if (_imagenPerfil == null) {
+      _mostrarMensajeError('Por favor seleccione una imagen primero');
+      return;
+    }
+
+    try {
+      setState(() {
+        _subiendoImagen = true;
+      });
+
+      // Crear un request multipart
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/Usuarios/SubirImagen'),
+      );
+
+      // Añadir la API key en los headers
+      request.headers['X-API-KEY'] = ApiConfig.apiKey;
+
+      // Añadir la imagen al request
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'imagen', // nombre del parámetro que espera el servidor
+          _imagenPerfil!.path,
+        ),
+      );
+
+      // Enviar el request
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        // Convertir la respuesta a string
+        final respuestaString = await response.stream.bytesToString();
+        final respuestaJson = json.decode(respuestaString);
+
+        // Guardar la ruta de la imagen
+        setState(() {
+          _rutaImagenPerfil = respuestaJson['ruta'];
+          _subiendoImagen = false;
+        });
+
+        _mostrarMensajeExito('Imagen subida correctamente');
+      } else {
+        setState(() {
+          _subiendoImagen = false;
+        });
+        _mostrarMensajeError('Error al subir imagen: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _subiendoImagen = false;
+      });
+      _mostrarMensajeError('Error al subir imagen: $e');
+    }
+  }
+
+  /// Muestra un mensaje de error
+  void _mostrarMensajeError(String mensaje) {
+    if (!mounted) return;
+
+    Flushbar(
+      message: mensaje,
+      duration: const Duration(seconds: 3),
+      backgroundColor: Colors.red,
+      flushbarPosition: FlushbarPosition.TOP,
+    ).show(context);
+  }
+
+  /// Muestra un mensaje de éxito
+  void _mostrarMensajeExito(String mensaje) {
+    if (!mounted) return;
+
+    Flushbar(
+      message: mensaje,
+      duration: const Duration(seconds: 2),
+      backgroundColor: Colors.green,
+      flushbarPosition: FlushbarPosition.TOP,
+    ).show(context);
+  }
+
   /// Actualiza el formateador de teléfono según el país seleccionado
-void _actualizarFormateadorTelefono(String codigoIso) {
-  String mask;
-  switch (codigoIso) {
-    case 'HN':
-      mask = '####-####'; // Honduras: 9876-5432
-      break;
-    case 'US':
-    case 'CA':
-      mask = '(###) ###-####'; // USA/Canadá: (123) 456-7890
-      break;
-    case 'MX':
-      mask = '## #### ####'; // México: 55 1234 5678
-      break;
-    case 'GT':
-    case 'SV':
-    case 'NI':
-      mask = '#### ####'; // Guatemala, El Salvador, Nicaragua: 5555 1234
-      break;
-    case 'CR':
-      mask = '####-####'; // Costa Rica: 8888-9999
-      break;
-    case 'PA':
-      mask = '####-####'; // Panamá: 6666-7777
-      break;
-    default:
-      mask = '########'; // Formato genérico
-      break;
+  void _actualizarFormateadorTelefono(String codigoIso) {
+    String mask;
+    switch (codigoIso) {
+      case 'HN':
+        mask = '####-####'; // Honduras: 9876-5432
+        break;
+      case 'US':
+      case 'CA':
+        mask = '(###) ###-####'; // USA/Canadá: (123) 456-7890
+        break;
+      case 'MX':
+        mask = '## #### ####'; // México: 55 1234 5678
+        break;
+      case 'GT':
+      case 'SV':
+      case 'NI':
+        mask = '#### ####'; // Guatemala, El Salvador, Nicaragua: 5555 1234
+        break;
+      case 'CR':
+        mask = '####-####'; // Costa Rica: 8888-9999
+        break;
+      case 'PA':
+        mask = '####-####'; // Panamá: 6666-7777
+        break;
+      default:
+        mask = '########'; // Formato genérico
+        break;
+    }
+
+    _telefonoFormatterDinamico = MaskTextInputFormatter(
+      mask: mask,
+      filter: {"#": RegExp(r'[0-9]')},
+      type: MaskAutoCompletionType.lazy,
+    );
   }
 
-  _telefonoFormatterDinamico = MaskTextInputFormatter(
-    mask: mask,
-    filter: {"#": RegExp(r'[0-9]')},
-    type: MaskAutoCompletionType.lazy,
-  );
-}
-
-/// Obtiene el texto de ejemplo según el país
-String _obtenerHintTelefono(String codigoIso) {
-  switch (codigoIso) {
-    case 'HN':
-      return 'Ej: 9876-5432';
-    case 'US':
-    case 'CA':
-      return 'Ej: (123) 456-7890';
-    case 'MX':
-      return 'Ej: 55 1234 5678';
-    case 'GT':
-    case 'SV':
-    case 'NI':
-      return 'Ej: 5555 1234';
-    case 'CR':
-    case 'PA':
-      return 'Ej: 8888-9999';
-    default:
-      return 'Ingrese su número';
+  /// Obtiene el texto de ejemplo según el país
+  String _obtenerHintTelefono(String codigoIso) {
+    switch (codigoIso) {
+      case 'HN':
+        return 'Ej: 9876-5432';
+      case 'US':
+      case 'CA':
+        return 'Ej: (123) 456-7890';
+      case 'MX':
+        return 'Ej: 55 1234 5678';
+      case 'GT':
+      case 'SV':
+      case 'NI':
+        return 'Ej: 5555 1234';
+      case 'CR':
+      case 'PA':
+        return 'Ej: 8888-9999';
+      default:
+        return 'Ingrese su número';
+    }
   }
-}
 
-/// Obtiene el número completo con código de país
-String obtenerTelefonoCompleto() {
-  if (_telefonoController.text.isNotEmpty) {
-    return '$_codigoPais ${_telefonoController.text}';
+  /// Obtiene el número completo con código de país
+  String obtenerTelefonoCompleto() {
+    if (_telefonoController.text.isNotEmpty) {
+      return '$_codigoPais ${_telefonoController.text}';
+    }
+    return '';
   }
-  return '';
-}
 
   // Para manejar la suscripción a cambios de conectividad
   late Stream<ConnectivityResult> _connectivityStream;
@@ -162,7 +297,6 @@ String obtenerTelefonoCompleto() {
     {'valor': 'M', 'texto': 'M'},
     {'valor': 'F', 'texto': 'F'},
   ];
-  
 
   // Lista para almacenar los estados civiles cargados desde la API
   List<EstadoCivil> _estadosCiviles = [];
@@ -189,7 +323,7 @@ String obtenerTelefonoCompleto() {
     _pasoActual = 0;
     _cargarEstadosCiviles();
     _cargarDepartamentos();
-     _actualizarFormateadorTelefono('HN');
+    _actualizarFormateadorTelefono('HN');
 
     // Configurar la escucha de cambios en la conectividad
     _connectivityStream = _connectivityService.onConnectivityChanged;
@@ -729,7 +863,7 @@ String obtenerTelefonoCompleto() {
     _correoController.dispose();
     _direccionController.dispose();
     _municipioController.dispose();
-      _telefonoFormatterDinamico = null;
+    _telefonoFormatterDinamico = null;
 
     // Cerrar cualquier notificación pendiente de manera segura
     if (_currentFlushbar != null) {
@@ -780,6 +914,14 @@ String obtenerTelefonoCompleto() {
     });
 
     // Verificamos que todos los datos obligatorios estén completos
+    if (_rutaImagenPerfil == null) {
+      setState(() {
+        _cargando = false;
+      });
+      _mostrarError('Por favor seleccione una imagen de perfil');
+      return;
+    }
+
     if (_estadoCivilSeleccionado == null || _estadoCivilSeleccionado == 0) {
       setState(() {
         _cargando = false;
@@ -822,6 +964,7 @@ String obtenerTelefonoCompleto() {
         'direccion': _direccionController.text.trim(),
         'municipioCodigo': _municipioSeleccionado ?? '',
         'estadoCivilId': _estadoCivilSeleccionado!,
+        'usua_Imagen': _rutaImagenPerfil, // Añadir la ruta de la imagen
       };
 
       // Realizar la solicitud de registro
@@ -838,6 +981,8 @@ String obtenerTelefonoCompleto() {
         direccion: userData['direccion'] as String,
         municipioCodigo: userData['municipioCodigo'] as String,
         estadoCivilId: userData['estadoCivilId'] as int,
+        usua_Imagen:
+            userData['usua_Imagen'] as String?, // Añadir la ruta de la imagen
       );
 
       // Cerrar cualquier notificación anterior de manera segura
@@ -973,33 +1118,33 @@ String obtenerTelefonoCompleto() {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // DNI
-      TextFormField(
-  controller: _dniController,
-  keyboardType: TextInputType.number,
-  inputFormatters: [_dniFormatter],
-  textInputAction: TextInputAction.next,
-  textCapitalization: TextCapitalization.characters,
-  decoration: InputDecoration(
-    labelText: 'DNI / Identidad',
-    hintText: 'Ej: 0801-1998-12345',
-    helperText: 'Ingrese los 13 dígitos del DNI',
-    prefixIcon: const Icon(Icons.credit_card),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: primaryColor, width: 2),
-    ),
-  ),
-  validator: (value) {
-    if (value == null || value.isEmpty) {
-      return 'El DNI es requerido';
-    }
-    if (!_dniFormatter.isFill()) {
-      return 'El DNI debe tener 13 dígitos completos';
-    }
-    return null;
-  },
-),
+        TextFormField(
+          controller: _dniController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [_dniFormatter],
+          textInputAction: TextInputAction.next,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            labelText: 'DNI / Identidad',
+            hintText: 'Ej: 0801-1998-12345',
+            helperText: 'Ingrese los 13 dígitos del DNI',
+            prefixIcon: const Icon(Icons.credit_card),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'El DNI es requerido';
+            }
+            if (!_dniFormatter.isFill()) {
+              return 'El DNI debe tener 13 dígitos completos';
+            }
+            return null;
+          },
+        ),
 
         const SizedBox(height: 15),
 
@@ -1058,98 +1203,113 @@ String obtenerTelefonoCompleto() {
         const SizedBox(height: 15),
 
         // Sexo (Radio)
-      Container(
-  decoration: BoxDecoration(
-    border: Border.all(color: Colors.grey.shade300),
-    borderRadius: BorderRadius.circular(10),
-  ),
-  padding: const EdgeInsets.all(10),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Padding(
-        padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
-        child: Text('Sexo', style: TextStyle(fontSize: 16)),
-      ),
-      Row(
-        children: _opcionesSexo.map((opcion) {
-          final bool seleccionado = _sexoSeleccionado == opcion['valor'];
-          final Color colorFondo = opcion['valor'] == 'M'
-              ? (seleccionado ? Colors.blue.shade100 : Colors.white)
-              : (seleccionado ? Colors.pink.shade100 : Colors.white);
-          final Color colorBorde = opcion['valor'] == 'M'
-              ? Colors.blue
-              : Colors.pink;
-          final IconData icono = opcion['valor'] == 'M'
-              ? Icons.male
-              : Icons.female;
-
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _sexoSeleccionado = opcion['valor'];
-                });
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                margin: const EdgeInsets.symmetric(horizontal: 5),
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                decoration: BoxDecoration(
-                  color: colorFondo,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: seleccionado ? colorBorde : Colors.grey.shade300,
-                    width: seleccionado ? 2 : 1,
-                  ),
-                  boxShadow: seleccionado
-                      ? [
-                          BoxShadow(
-                            color: colorBorde.withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          )
-                        ]
-                      : [],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icono, color: colorBorde, size: 20),
-                    const SizedBox(width: 6),
-                    Text(
-                      opcion['texto'],
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: seleccionado ? colorBorde : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Radio<String>(
-                      value: opcion['valor'],
-                      groupValue: _sexoSeleccionado,
-                      onChanged: (valor) {
-                        setState(() {
-                          _sexoSeleccionado = valor!;
-                        });
-                      },
-                      activeColor: colorBorde,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                ),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+                child: Text('Sexo', style: TextStyle(fontSize: 16)),
               ),
-            ),
-          );
-        }).toList(),
-      ),
-    ],
-  ),
-),
+              Row(
+                children:
+                    _opcionesSexo.map((opcion) {
+                      final bool seleccionado =
+                          _sexoSeleccionado == opcion['valor'];
+                      final Color colorFondo =
+                          opcion['valor'] == 'M'
+                              ? (seleccionado
+                                  ? Colors.blue.shade100
+                                  : Colors.white)
+                              : (seleccionado
+                                  ? Colors.pink.shade100
+                                  : Colors.white);
+                      final Color colorBorde =
+                          opcion['valor'] == 'M' ? Colors.blue : Colors.pink;
+                      final IconData icono =
+                          opcion['valor'] == 'M' ? Icons.male : Icons.female;
 
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _sexoSeleccionado = opcion['valor'];
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            margin: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorFondo,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color:
+                                    seleccionado
+                                        ? colorBorde
+                                        : Colors.grey.shade300,
+                                width: seleccionado ? 2 : 1,
+                              ),
+                              boxShadow:
+                                  seleccionado
+                                      ? [
+                                        BoxShadow(
+                                          color: colorBorde.withOpacity(0.3),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                      : [],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(icono, color: colorBorde, size: 20),
+                                const SizedBox(width: 6),
+                                Text(
+                                  opcion['texto'],
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        seleccionado
+                                            ? colorBorde
+                                            : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Radio<String>(
+                                  value: opcion['valor'],
+                                  groupValue: _sexoSeleccionado,
+                                  onChanged: (valor) {
+                                    setState(() {
+                                      _sexoSeleccionado = valor!;
+                                    });
+                                  },
+                                  activeColor: colorBorde,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+              ),
+            ],
+          ),
+        ),
 
         const SizedBox(height: 15),
 
@@ -1220,55 +1380,69 @@ String obtenerTelefonoCompleto() {
         const SizedBox(height: 15),
 
         // Teléfono
-     TextFormField(
-  controller: _telefonoController,
-  keyboardType: TextInputType.phone,
-  inputFormatters: [_telefonoFormatterDinamico ?? _telefonoFormatter],
-  textInputAction: TextInputAction.next,
-  decoration: InputDecoration(
-    labelText: 'Teléfono',
-    hintText: _obtenerHintTelefono(_codigoIsoPais),
-    helperText: 'Ingrese su número de teléfono',
-    prefixIcon: CountryCodePicker(
-      onChanged: (CountryCode countryCode) {
-        setState(() {
-          _codigoPais = countryCode.dialCode!;
-          _codigoIsoPais = countryCode.code!;
-          _actualizarFormateadorTelefono(_codigoIsoPais);
-          _telefonoController.clear(); // Limpiar al cambiar país
-        });
-      },
-      initialSelection: 'HN', // Honduras por defecto
-      favorite: const ['+504', 'HN', '+1', 'US', '+52', 'MX', '+502', 'GT'],
-      showCountryOnly: false,
-      showOnlyCountryWhenClosed: false,
-      hideMainText: true, // Solo mostrar bandera y código
-      flagWidth: 25,
-      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-      dialogTextStyle: const TextStyle(fontSize: 16),
-      searchStyle: const TextStyle(fontSize: 16),
-      dialogBackgroundColor: Colors.white,
-      barrierColor: Colors.black54,
-    ),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: primaryColor, width: 2),
-    ),
-  ),
-  validator: (value) {
-    if (value == null || value.isEmpty) {
-      return 'El teléfono es requerido';
-    }
-    if (_telefonoFormatterDinamico != null && !_telefonoFormatterDinamico!.isFill()) {
-      return 'Formato de teléfono incorrecto para el país seleccionado';
-    }
-    if (_telefonoFormatterDinamico == null && !_telefonoFormatter.isFill()) {
-      return 'Debe ingresar exactamente 8 dígitos';
-    }
-    return null;
-  },
-),
+        TextFormField(
+          controller: _telefonoController,
+          keyboardType: TextInputType.phone,
+          inputFormatters: [_telefonoFormatterDinamico ?? _telefonoFormatter],
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: 'Teléfono',
+            hintText: _obtenerHintTelefono(_codigoIsoPais),
+            helperText: 'Ingrese su número de teléfono',
+            prefixIcon: CountryCodePicker(
+              onChanged: (CountryCode countryCode) {
+                setState(() {
+                  _codigoPais = countryCode.dialCode!;
+                  _codigoIsoPais = countryCode.code!;
+                  _actualizarFormateadorTelefono(_codigoIsoPais);
+                  _telefonoController.clear(); // Limpiar al cambiar país
+                });
+              },
+              initialSelection: 'HN', // Honduras por defecto
+              favorite: const [
+                '+504',
+                'HN',
+                '+1',
+                'US',
+                '+52',
+                'MX',
+                '+502',
+                'GT',
+              ],
+              showCountryOnly: false,
+              showOnlyCountryWhenClosed: false,
+              hideMainText: true, // Solo mostrar bandera y código
+              flagWidth: 25,
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+              dialogTextStyle: const TextStyle(fontSize: 16),
+              searchStyle: const TextStyle(fontSize: 16),
+              dialogBackgroundColor: Colors.white,
+              barrierColor: Colors.black54,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: primaryColor, width: 2),
+            ),
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'El teléfono es requerido';
+            }
+            if (_telefonoFormatterDinamico != null &&
+                !_telefonoFormatterDinamico!.isFill()) {
+              return 'Formato de teléfono incorrecto para el país seleccionado';
+            }
+            if (_telefonoFormatterDinamico == null &&
+                !_telefonoFormatter.isFill()) {
+              return 'Debe ingresar exactamente 8 dígitos';
+            }
+            return null;
+          },
+        ),
 
         const SizedBox(height: 15),
 
@@ -1499,6 +1673,98 @@ String obtenerTelefonoCompleto() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Selección de imagen de perfil
+        const Text(
+          'Imagen de Perfil (Obligatorio)',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 10),
+
+        // Widget para mostrar la imagen seleccionada y botones para seleccionar
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            children: [
+              // Mostrar imagen seleccionada o placeholder
+              Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(75),
+                  border: Border.all(color: primaryColor, width: 2),
+                ),
+                child:
+                    _subiendoImagen
+                        ? const Center(child: CircularProgressIndicator())
+                        : _imagenPerfil != null
+                        ? ClipRRect(
+                          borderRadius: BorderRadius.circular(75),
+                          child: Image.file(
+                            _imagenPerfil!,
+                            width: 150,
+                            height: 150,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                        : Icon(
+                          Icons.person,
+                          size: 80,
+                          color: Colors.grey.shade400,
+                        ),
+              ),
+              const SizedBox(height: 15),
+
+              // Botones para seleccionar imagen
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Botón para seleccionar desde galería
+                  ElevatedButton.icon(
+                    onPressed: _seleccionarImagenDesdeGaleria,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Galería'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 1),
+
+                  // Botón para tomar foto
+                  ElevatedButton.icon(
+                    onPressed: _tomarFoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Cámara'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Mostrar ruta de la imagen (para depuración)
+              if (_rutaImagenPerfil != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    'Imagen guardada correctamente.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
         // Usuario
         TextFormField(
           controller: _usuarioController,
@@ -1636,58 +1902,58 @@ String obtenerTelefonoCompleto() {
                   child: Column(
                     children: [
                       Container(
-                          padding: const EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blue.withOpacity(0.2),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.assignment_outlined,
-                            size: 50,
-                            color: Colors.blue,
-                          ),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withOpacity(0.2),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-                        RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'SI',
-                                style: TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade800,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'RESP',
-                                style: TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
+                        child: const Icon(
+                          Icons.assignment_outlined,
+                          size: 50,
+                          color: Colors.blue,
                         ),
-                        const Text(
-                          'Sistema de Reportes',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            letterSpacing: 1.2,
-                          ),
+                      ),
+                      const SizedBox(height: 20),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'SI',
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade800,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'RESP',
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade600,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 30),
+                      ),
+                      const Text(
+                        'Sistema de Reportes',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 30),
                       // TAB DE NAVEGACIÓN
                       Container(
                         decoration: BoxDecoration(

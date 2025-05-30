@@ -88,6 +88,12 @@ class AuthService {
       if (usuario.pantallas != null) {
         await _storage.write(key: 'usuario_pantallas', value: usuario.pantallas);
       }
+      
+      // Guardar la ruta de la imagen de perfil si está disponible
+      if (usuario.usua_Imagen != null && usuario.usua_Imagen!.isNotEmpty) {
+        await _storage.write(key: 'usuario_imagen', value: usuario.usua_Imagen);
+        debugPrint('Imagen de perfil guardada: ${usuario.usua_Imagen}');
+      }
 
       // Guardar estado de sesión activa según la elección del usuario
       await _storage.write(
@@ -160,9 +166,18 @@ class AuthService {
     return await _storage.read(key: 'usuario_token');
   }
 
-  /// Obtiene el nombre del usuario logueado
+  /// Obtiene el nombre de usuario almacenado
+  ///
+  /// @return Future<String?> Nombre de usuario o null si no existe
   static Future<String?> obtenerNombreUsuario() async {
     return await _storage.read(key: 'usuario_nombre');
+  }
+  
+  /// Obtiene la ruta de la imagen de perfil almacenada
+  ///
+  /// @return Future<String?> Ruta de la imagen de perfil o null si no existe
+  static Future<String?> obtenerImagenPerfil() async {
+    return await _storage.read(key: 'usuario_imagen');
   }
 
   /// Obtiene el correo del usuario
