@@ -206,6 +206,80 @@ class UsuarioService {
     }
   }
 
+  /// Edita el registro completo de un usuario (perfil)
+  Future<Map<String, dynamic>> editarRegistro({
+    required int usuarioId,
+    required Map<String, dynamic> personaData,
+    required String usuario,
+    String? usua_Imagen,
+    required int usuarioModificacion,
+  }) async {
+    try {
+      // Verificar conectividad
+      final hasConnection = await _connectivityService.hasConnection();
+      if (!hasConnection) {
+        return {
+          'exito': false,
+          'mensaje':
+              'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+        };
+      }
+
+      final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/EditarRegistro');
+      final response = await http.put(
+        url,
+        headers: ApiConfig.headers,
+        body: jsonEncode({
+          'usua_Id': usuarioId,
+          'persona': jsonEncode(personaData),
+          'usua_Usuario': usuario,
+          'usua_Imagen': usua_Imagen,
+          'usua_Modificacion': usuarioModificacion,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        
+        // Verificar si la estructura de la respuesta es la esperada
+        if (jsonResponse.containsKey('data')) {
+          // Nueva estructura de respuesta
+          final data = jsonResponse['data'];
+          final codeStatus = data['code_Status'] ?? 0;
+          final messageStatus = data['message_Status'] ?? 'Error desconocido';
+          
+          return {
+            'exito': codeStatus == 1,
+            'mensaje': messageStatus,
+            'codeStatus': codeStatus,
+          };
+        } else {
+          // Estructura antigua por si acaso
+          final codeStatus = jsonResponse['code_Status'] ?? 0;
+          final messageStatus = jsonResponse['message_Status'] ?? 'Error desconocido';
+          
+          return {
+            'exito': codeStatus == 1,
+            'mensaje': messageStatus,
+            'codeStatus': codeStatus,
+          };
+        }
+      } else {
+        return {
+          'exito': false,
+          'mensaje': 'Error al actualizar el perfil. Código: ${response.statusCode}',
+          'codeStatus': 0,
+        };
+      }
+    } catch (e) {
+      return {
+        'exito': false,
+        'mensaje': 'Error al actualizar el perfil: $e',
+        'codeStatus': 0,
+      };
+    }
+  }
+
   /// Obtiene los detalles de un usuario por su ID
   Future<Map<String, dynamic>> obtenerDetalleUsuario(int usuarioId) async {
     try {
@@ -214,34 +288,37 @@ class UsuarioService {
       if (!hasConnection) {
         return {
           'exito': false,
-          'mensaje': 'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+          'mensaje':
+              'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
         };
       }
 
-      final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Detalle?id=$usuarioId');
-      final response = await http.get(
+      final url = Uri.parse('${ApiConfig.baseUrl}/Usuarios/Detalle');
+      final response = await http.post(
         url,
         headers: ApiConfig.headers,
+        body: jsonEncode({'usua_Id': usuarioId}),
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonResponse = jsonDecode(response.body);
-        
+
         if (jsonResponse.isNotEmpty) {
           final usuarioData = jsonResponse[0];
-          
+
           // Parsear los datos de persona y empleado que vienen como strings JSON
           Map<String, dynamic> personaData = {};
           Map<String, dynamic>? empleadoData;
-          
+
           if (usuarioData['persona'] != null) {
             personaData = jsonDecode(usuarioData['persona']);
           }
-          
-          if (usuarioData['empleado'] != null && usuarioData['empleado'] != 'null') {
+
+          if (usuarioData['empleado'] != null &&
+              usuarioData['empleado'] != 'null') {
             empleadoData = jsonDecode(usuarioData['empleado']);
           }
-          
+
           return {
             'exito': true,
             'usuario': {
@@ -259,15 +336,13 @@ class UsuarioService {
             'empleado': empleadoData,
           };
         } else {
-          return {
-            'exito': false,
-            'mensaje': 'No se encontró el usuario',
-          };
+          return {'exito': false, 'mensaje': 'No se encontró el usuario'};
         }
       } else {
         return {
           'exito': false,
-          'mensaje': 'Error al obtener los detalles del usuario. Código: ${response.statusCode}',
+          'mensaje':
+              'Error al obtener los detalles del usuario. Código: ${response.statusCode}',
         };
       }
     } catch (e) {

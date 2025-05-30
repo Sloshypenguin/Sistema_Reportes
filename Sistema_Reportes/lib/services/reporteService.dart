@@ -7,6 +7,77 @@ import '../services/connectivityService.dart';
 class ReporteService {
   final ConnectivityService _connectivityService = ConnectivityService();
 
+  /// Obtiene las imágenes asociadas a un reporte específico
+  Future<List<Map<String, dynamic>>> obtenerImagenesPorReporte(int repoId) async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/ImagenPorReporte/Listar/$repoId');
+
+    try {
+      final response = await http.get(url, headers: ApiConfig.headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        
+        // Verificar si la respuesta tiene la estructura esperada
+        if (jsonResponse.containsKey('data') && jsonResponse['success'] == true) {
+          final List<dynamic> imagenesData = jsonResponse['data'];
+          return List<Map<String, dynamic>>.from(imagenesData);
+        } else {
+          // Si no hay imágenes o la estructura es diferente
+          return [];
+        }
+      } else {
+        print('Error al obtener imágenes: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Excepción al obtener imágenes: $e');
+      return [];
+    }
+  }
+
+  /// Lista los reportes asociados a una persona específica
+  Future<List<Reporte>> listarReportesPorPersona(int persId) async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/ListarPorPersona/$persId');
+
+    try {
+      final response = await http.get(url, headers: ApiConfig.headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        
+        // Verificar si la respuesta tiene la estructura anidada esperada
+        if (jsonResponse.containsKey('data') && jsonResponse['success'] == true) {
+          final data = jsonResponse['data'];
+          
+          // Verificar si data tiene la estructura esperada
+          if (data is Map<String, dynamic> && data.containsKey('data')) {
+            final List<dynamic> reportesData = data['data'];
+            return reportesData.map((json) => Reporte.fromJson(json)).toList();
+          }
+        }
+        
+        // Si no hay reportes o la estructura es diferente
+        return [];
+      } else {
+        print('Error al cargar reportes por persona: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Excepción al cargar reportes por persona: $e');
+      return [];
+    }
+  }
+
   /// Lista todos los reportes disponibles desde la API
   Future<List<Reporte>> listarReportes() async {
     final hasConnection = await _connectivityService.hasConnection();

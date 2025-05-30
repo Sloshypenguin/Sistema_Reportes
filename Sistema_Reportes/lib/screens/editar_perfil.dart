@@ -68,10 +68,13 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
   String _direccionUsuario = '';
   String? _sexoSeleccionado;
   int _usuarioId = 0;
-  int _persId = 0;
-  int _roleId = 0;
-  bool _esAdmin = false;
-  bool _esEmpleado = false;
+  int _persId =
+      0; // ID de la persona asociada al usuario (necesario para cargar datos)
+  int _roleId = 0; // ID del rol del usuario (necesario para cargar datos)
+  bool _esAdmin =
+      false; // Indica si el usuario es administrador (necesario para cargar datos)
+  bool _esEmpleado =
+      false; // Indica si el usuario es empleado (necesario para cargar datos)
   String? _imagenPerfilActual;
 
   // Formatters para campos específicos
@@ -590,29 +593,51 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
     if (!_validarCampos()) {
       return;
     }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Llamar al servicio para actualizar el usuario
-      final resultado = await _usuarioService.actualizarUsuario(
+      // Preparar los datos de persona para el JSON
+      final personaData = {
+        'Pers_DNI': _dniController.text.trim(),
+        'Pers_Nombre': _nombrePersonaController.text.trim(),
+        'Pers_Apellido': _apellidoController.text.trim(),
+        'Pers_Sexo': _sexoSeleccionado,
+        'Pers_Telefono': _telefonoController.text.trim(),
+        'Pers_Correo': _correoController.text.trim(),
+        'Pers_Direccion': _direccionController.text.trim(),
+        'Muni_Codigo': _municipioSeleccionado,
+        'EsCi_Id': _estadoCivilSeleccionado,
+      };
+
+      // Verificar conectividad antes de enviar la solicitud
+      final tieneConexion = await _connectivityService.hasConnection();
+      if (!tieneConexion) {
+        setState(() {
+          _isLoading = false;
+        });
+        _mostrarMensajeError(
+          'No hay conexión a Internet. Por favor, verifique su conexión e intente nuevamente.',
+        );
+        return;
+      }
+
+      // Llamar al servicio para actualizar el perfil completo
+      final resultado = await _usuarioService.editarRegistro(
         usuarioId: _usuarioId,
+        personaData: personaData,
         usuario: _nombreController.text.trim(),
-        persId: _persId,
-        roleId: _roleId,
-        esAdmin: _esAdmin,
-        usuarioModificacion: _usuarioId,
-        esEmpleado: _esEmpleado,
-        correo: _correoController.text.trim(),
         usua_Imagen: _rutaImagenPerfil ?? _imagenPerfilActual,
+        usuarioModificacion: _usuarioId,
       );
 
       setState(() {
         _isLoading = false;
       });
 
-      if (resultado['success'] == true) {
+      if (resultado['exito']) {
         // Actualizar datos en el almacenamiento seguro
         await _storage.write(
           key: 'usuario_nombre',
@@ -629,7 +654,9 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
           await _storage.write(key: 'usuario_imagen', value: _rutaImagenPerfil);
         }
 
-        _mostrarMensajeExito('Perfil actualizado correctamente');
+        _mostrarMensajeExito(
+          resultado['mensaje'] ?? 'Perfil actualizado correctamente',
+        );
 
         // Volver a la pantalla anterior
         if (mounted) {
@@ -637,7 +664,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
         }
       } else {
         _mostrarMensajeError(
-          resultado['message'] ?? 'Error al actualizar perfil',
+          resultado['mensaje'] ?? 'Error al actualizar perfil',
         );
       }
     } catch (e) {
@@ -963,9 +990,18 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
                                               'Seleccione una opción',
                                             ),
                                           ),
-                                          ..._estadosCiviles.map((estadoCivil) {
+                                          // Asegurarse de que no haya valores duplicados
+                                          ...Set<int>.from(
+                                            _estadosCiviles.map(
+                                              (e) => e.esCi_Id,
+                                            ),
+                                          ).map((id) {
+                                            final estadoCivil = _estadosCiviles
+                                                .firstWhere(
+                                                  (e) => e.esCi_Id == id,
+                                                );
                                             return DropdownMenuItem<int?>(
-                                              value: estadoCivil.esCi_Id,
+                                              value: id,
                                               child: Text(
                                                 estadoCivil.esCi_Nombre,
                                               ),

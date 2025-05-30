@@ -30,6 +30,10 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Mapa para almacenar las imágenes de cada reporte
+  Map<int, List<Map<String, dynamic>>> _imagenesPorReporte = {};
+  bool _cargandoImagenes = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +43,8 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
   /// Carga los reportes desde el servicio
   Future<void> _cargarReportes() async {
+    if (!mounted) return;
+    
     try {
       setState(() {
         _isLoading = true;
@@ -47,14 +53,56 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
       final reportes = await _reporteService.listarReportes();
       
+      if (!mounted) return;
       setState(() {
         _reportes = reportes;
         _isLoading = false;
       });
+      
+      // Cargar las imágenes de cada reporte
+      _cargarImagenesReportes(reportes);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
+      });
+    }
+  }
+  
+  /// Carga las imágenes para cada reporte
+  Future<void> _cargarImagenesReportes(List<Reporte> reportes) async {
+    if (!mounted) return;
+    
+    try {
+      setState(() {
+        _cargandoImagenes = true;
+      });
+      
+      final imagenesMap = <int, List<Map<String, dynamic>>>{};
+      
+      for (final reporte in reportes) {
+        if (!mounted) return;
+        
+        try {
+          final imagenes = await _reporteService.obtenerImagenesPorReporte(reporte.repo_Id);
+          imagenesMap[reporte.repo_Id] = imagenes;
+        } catch (e) {
+          debugPrint('Error al cargar imágenes para reporte ${reporte.repo_Id}: $e');
+          // Continuar con el siguiente reporte si hay un error
+        }
+      }
+      
+      if (!mounted) return;
+      setState(() {
+        _imagenesPorReporte = imagenesMap;
+        _cargandoImagenes = false;
+      });
+    } catch (e) {
+      debugPrint('Error al cargar imágenes de reportes: $e');
+      if (!mounted) return;
+      setState(() {
+        _cargandoImagenes = false;
       });
     }
   }
@@ -208,6 +256,11 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
               
+              const SizedBox(height: 12),
+              
+              // Imágenes del reporte
+              _buildImagenesReporte(reporte.repo_Id),
+              
               const SizedBox(height: 8),
               
               // Información del servicio
@@ -344,6 +397,52 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
           ),
           const SizedBox(height: 4),
         ],
+      ),
+    );
+  }
+
+  /// Widget para mostrar las imágenes de un reporte
+  Widget _buildImagenesReporte(int reporteId) {
+    final imagenes = _imagenesPorReporte[reporteId] ?? [];
+    
+    if (_cargandoImagenes && imagenes.isEmpty) {
+      return const SizedBox(
+        height: 40,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    
+    if (imagenes.isEmpty) {
+      return const SizedBox.shrink(); // No mostrar nada si no hay imágenes
+    }
+    
+    return SizedBox(
+      height: 120,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: imagenes.length,
+        itemBuilder: (context, index) {
+          final imagen = imagenes[index];
+          final imagenUrl = imagen['imre_Imagen'];
+          
+          return Container(
+            width: 120,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              image: DecorationImage(
+                image: NetworkImage('http://sistemareportesgob.somee.com$imagenUrl'),
+                fit: BoxFit.cover,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

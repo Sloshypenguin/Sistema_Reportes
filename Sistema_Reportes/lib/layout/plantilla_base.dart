@@ -99,30 +99,11 @@ class _PlantillaBaseState extends State<PlantillaBase> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 10),
-            child: PopupMenuButton<String>(
-              offset: const Offset(0, 45),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              onSelected: (value) {
-                if (value == 'cerrar') _cerrarSesion();
+            child: GestureDetector(
+              onTap: () {
+                // Navegar a la pantalla "Mi Perfil"
+                Navigator.pushNamed(context, '/mi_perfil');
               },
-              itemBuilder:
-                  (_) => [
-                    PopupMenuItem(
-                      value: 'cerrar',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.logout, color: Colors.red),
-                          SizedBox(width: 10),
-                          Text(
-                            'Cerrar Sesión',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
               child: CircleAvatar(
                 backgroundColor: Colors.blue.shade100,
                 // Mostrar imagen de perfil si está disponible, de lo contrario mostrar la inicial del nombre
