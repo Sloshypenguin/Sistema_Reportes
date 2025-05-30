@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sistema_reportes/services/auth_service.dart';
 import '../models/reporteViewModel.dart';
 import '../services/reporteService.dart';
 import 'package:sistema_reportes/layout/plantilla_base.dart';
@@ -24,6 +25,7 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
   final _ubicacionController = TextEditingController();
   final _personaIdController = TextEditingController();
   final _servicioIdController = TextEditingController();
+  
   
   // Variables para el dropdown de servicios
   List<Servicio> _servicios = [];
@@ -132,10 +134,11 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
 
       // Crear instancia del servicio
       final reporteService = ReporteService();
+      final personaId = await AuthService.obtenerPersonaId();
       
       // Llamar al método real del servicio
       final resultado = await reporteService.crearReporte(
-        personaId: int.parse(_personaIdController.text.trim()),
+        personaId: int.tryParse(personaId?? "") ?? 0,
         servicioId: _servicioSeleccionado?.serv_Id ?? 0,
         descripcion: _descripcionController.text.trim(),
         ubicacion: _ubicacionController.text.trim().isEmpty ? '' : _ubicacionController.text.trim(),
@@ -498,43 +501,7 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Campo ID Persona
-                        _buildSectionTitle('ID de Persona'),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _personaIdController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            hintText: 'Ingresa el ID de la persona (ej: 123)',
-                            prefixIcon: const Icon(Icons.person, color: Colors.blue),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.blue, width: 2),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return 'El ID de persona es obligatorio';
-                            }
-                            if (int.tryParse(value.trim()) == null) {
-                              return 'Debe ser un número válido';
-                            }
-                            if (int.parse(value.trim()) <= 0) {
-                              return 'Debe ser un número mayor a 0';
-                            }
-                            return null;
-                          },
-                        ),
+
 
                         const SizedBox(height: 20),
 
@@ -584,12 +551,12 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                         const SizedBox(height: 20),
 
                         // Campo Ubicación
-                        _buildSectionTitle('Ubicación (Opcional)'),
+                        _buildSectionTitle('Ubicación'),
                         const SizedBox(height: 10),
                         TextFormField(
                           controller: _ubicacionController,
                           decoration: InputDecoration(
-                            hintText: 'Ubicación específica del problema...',
+                            hintText: 'Ubicación del problema...',
                             prefixIcon: const Icon(Icons.location_on, color: Colors.red),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -755,16 +722,6 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                             ),
                           ],
                         ),
-
-                        // Debug button (opcional, solo para desarrollo)
-                        if (true) // Cambia a false en producción
-                          Padding(
-                            padding: const EdgeInsets.only(top: 20),
-                            child: TextButton(
-                              onPressed: _debugServicios,
-                              child: const Text('Debug Servicios'),
-                            ),
-                          ),
                       ],
                     ),
                   ),
