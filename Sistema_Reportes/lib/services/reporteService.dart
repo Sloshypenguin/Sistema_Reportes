@@ -16,11 +16,7 @@ class ReporteService {
 
     final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/Listar');
 
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-
-    final response = await http.get(url, headers: ApiConfig.headers,);
+    final response = await http.get(url, headers: ApiConfig.headers);
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> jsonResponse = json.decode(response.body);
@@ -30,5 +26,157 @@ class ReporteService {
     } else {
       throw Exception("Error al cargar reportes: ${response.statusCode}");
     }
+  }
+
+  /// Crea un nuevo reporte en la API
+  Future<Map<String, dynamic>> crearReporte({
+    required int personaId,
+    required int servicioId,
+    required String descripcion,
+    required String ubicacion,
+    required bool esPrioritario,
+    required int usuarioCreacion,
+  }) async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/Insertar');
+
+    // Obtener la fecha actual en formato ISO string
+    final fechaCreacion = DateTime.now().toIso8601String();
+
+    final body = {
+      'pers_Id': personaId,
+      'serv_Id': servicioId,
+      'repo_Descripcion': descripcion,
+      'repo_Ubicacion': ubicacion,
+      'repo_Prioridad': esPrioritario,
+      'usua_Creacion': usuarioCreacion,
+      'repo_FechaCreacion': fechaCreacion,
+    };
+
+    print('=== DEBUG CREAR REPORTE ===');
+    print('URL: $url');
+    print('Body enviado: ${json.encode(body)}');
+    print('Headers: ${ApiConfig.headers}');
+
+    final response = await http.post(
+      url,
+      headers: ApiConfig.headers,
+      body: json.encode(body),
+    );
+
+    print('Status Code: ${response.statusCode}');
+    print('Response Body: ${response.body}');
+    print('========================');
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      try {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        
+        // DEBUG: Mostrar toda la estructura de respuesta
+        print('Estructura completa de respuesta: $jsonResponse');
+        
+        // Manejar la estructura específica de tu API
+        // {
+        //   "code": 200,
+        //   "success": true,
+        //   "message": "Operación completada exitosamente.",
+        //   "data": {
+        //     "code_Status": 15,
+        //     "message_Status": "Reporte registrado correctamente."
+        //   }
+        // }
+        
+        if (jsonResponse.containsKey('data') && jsonResponse['data'] != null) {
+          final data = jsonResponse['data'] as Map<String, dynamic>;
+          final apiSuccess = jsonResponse['success'] ?? false;
+          final apiMessage = jsonResponse['message'] ?? 'Operación completada';
+          
+          // Obtener los valores del SP desde data
+          final codeStatus = data['code_Status'] ?? 0;
+          final messageStatus = data['message_Status'] ?? 'Reporte procesado';
+          
+          // El éxito se determina por:
+          // 1. La API dice success: true
+          // 2. Y el code_Status del SP es mayor a 0 (SCOPE_IDENTITY)
+          final operacionExitosa = apiSuccess && codeStatus > 0;
+          
+          return {
+            'success': operacionExitosa,
+            'code': codeStatus,
+            'message': operacionExitosa ? messageStatus : 'Error en el procesamiento',
+            'reporteId': operacionExitosa ? codeStatus : null,
+            'apiMessage': apiMessage, // Mensaje de la API
+            'spMessage': messageStatus, // Mensaje del SP
+          };
+        }
+        
+        // Fallback: Si no tiene la estructura esperada pero success es true
+        else if (jsonResponse.containsKey('success') && jsonResponse['success'] == true) {
+          return {
+            'success': true,
+            'code': 1,
+            'message': jsonResponse['message'] ?? 'Reporte creado exitosamente',
+            'reporteId': null,
+          };
+        }
+        
+        // Si llegamos aquí, algo no está bien
+        else {
+          print('Estructura de respuesta inesperada: $jsonResponse');
+          return {
+            'success': false,
+            'code': 0,
+            'message': 'Estructura de respuesta no válida',
+            'reporteId': null,
+            'rawResponse': jsonResponse,
+          };
+        }
+        
+      } catch (parseError) {
+        print('Error al parsear JSON: $parseError');
+        print('Response body: ${response.body}');
+        throw Exception('Error al procesar respuesta del servidor: $parseError');
+      }
+    } else {
+      print('Error HTTP: ${response.statusCode}');
+      print('Error body: ${response.body}');
+      throw Exception("Error al crear reporte: ${response.statusCode} - ${response.body}");
+    }
+  }
+
+  /// Versión alternativa del método crearReporte que acepta un objeto Reporte
+  Future<Map<String, dynamic>> crearReporteFromObject(Reporte reporte, int usuarioCreacion) async {
+    return await crearReporte(
+      personaId: reporte.pers_Id,
+      servicioId: reporte.serv_Id,
+      descripcion: reporte.repo_Descripcion,
+      ubicacion: reporte.repo_Ubicacion ?? '',
+      esPrioritario: reporte.repo_Prioridad,
+      usuarioCreacion: usuarioCreacion,
+    );
+  }
+
+  /// Método de conveniencia que retorna solo si fue exitoso o no
+  Future<bool> crearReporteSimple({
+    required int personaId,
+    required int servicioId,
+    required String descripcion,
+    required String ubicacion,
+    required bool esPrioritario,
+    required int usuarioCreacion,
+  }) async {
+    final resultado = await crearReporte(
+      personaId: personaId,
+      servicioId: servicioId,
+      descripcion: descripcion,
+      ubicacion: ubicacion,
+      esPrioritario: esPrioritario,
+      usuarioCreacion: usuarioCreacion,
+    );
+    return resultado['success'] ?? false;
   }
 }

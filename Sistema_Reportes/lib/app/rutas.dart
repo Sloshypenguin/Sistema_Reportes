@@ -5,6 +5,7 @@ import '../screens/mi_perfil.dart';
 // import '../screens/reportes.dart';
 import '../layout/plantilla_base.dart';
 import '../widgets/plantilla_widget.dart';
+import '../screens/reporteCrear.dart';
 
 Route<dynamic> generarRuta(RouteSettings settings) {
   Widget pagina;
@@ -20,6 +21,14 @@ Route<dynamic> generarRuta(RouteSettings settings) {
         titulo: 'Página Principal',
         mostrarBotonRegresar: false,
         child: PrincipalScreen(),
+      );
+      break;
+
+      case '/CrearReporte':
+      pagina = const PlantillaBase(
+        titulo: 'Crear Reporte',
+        mostrarBotonRegresar: false,
+        child: reporteCrear(titulo: 'Crear Reporte'),
       );
       break;
 

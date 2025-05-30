@@ -376,7 +376,6 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-   
       body: _isLoading
           ? const Center(
               child: Column(
@@ -523,6 +522,23 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                         ],
                       ),
                     ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'crear_reporte',
+        onPressed: () {
+          Navigator.pushNamed(context, '/CrearReporte');
+        },
+        tooltip: 'Crear nuevo reporte',
+        backgroundColor: Colors.green.shade600,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_circle_outline),
+        label: const Text(
+          'Crear Reporte',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ),
     );
   }
 }
