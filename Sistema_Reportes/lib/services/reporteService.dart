@@ -78,8 +78,8 @@ class ReporteService {
     }
   }
 
-  /// Lista todos los reportes disponibles desde la API
-  Future<List<Reporte>> listarReportes() async {
+  /// Lista todos los reportes disponibles desde la API con paginación
+  Future<List<Reporte>> listarReportes({int page = 1, int pageSize = 10}) async {
     final hasConnection = await _connectivityService.hasConnection();
     if (!hasConnection) {
       throw Exception("Sin conexión a internet");
@@ -92,10 +92,42 @@ class ReporteService {
     if (response.statusCode == 200) {
       final Map<String, dynamic> jsonResponse = json.decode(response.body);
       final List<dynamic> data = jsonResponse['data'];
-
-      return data.map((json) => Reporte.fromJson(json)).toList();
+      final List<Reporte> allReportes = data.map((json) => Reporte.fromJson(json)).toList();
+      
+      // Implementar paginación en el lado del cliente
+      // ya que el API no soporta paginación directamente
+      final startIndex = (page - 1) * pageSize;
+      final endIndex = startIndex + pageSize > allReportes.length 
+          ? allReportes.length 
+          : startIndex + pageSize;
+      
+      if (startIndex >= allReportes.length) {
+        return [];
+      }
+      
+      return allReportes.sublist(startIndex, endIndex);
     } else {
       throw Exception("Error al cargar reportes: ${response.statusCode}");
+    }
+  }
+  
+  /// Obtiene el número total de reportes disponibles
+  Future<int> obtenerTotalReportes() async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
+
+    final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/Listar');
+
+    final response = await http.get(url, headers: ApiConfig.headers);
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> jsonResponse = json.decode(response.body);
+      final List<dynamic> data = jsonResponse['data'];
+      return data.length;
+    } else {
+      throw Exception("Error al obtener total de reportes: ${response.statusCode}");
     }
   }
 

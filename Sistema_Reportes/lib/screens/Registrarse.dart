@@ -74,6 +74,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   /// Selecciona una imagen desde la galería
   Future<void> _seleccionarImagenDesdeGaleria() async {
+    if (!mounted) return;
+
     try {
       final XFile? imagen = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -81,7 +83,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         maxWidth: 800, // Ancho máximo
       );
 
-      if (imagen != null) {
+      if (imagen != null && mounted) {
         setState(() {
           _imagenPerfil = File(imagen.path);
           _rutaImagenPerfil =
@@ -92,12 +94,15 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         await _subirImagenAlServidor();
       }
     } catch (e) {
+      if (!mounted) return;
       _mostrarMensajeError('Error al seleccionar imagen: $e');
     }
   }
 
   /// Toma una foto con la cámara
   Future<void> _tomarFoto() async {
+    if (!mounted) return;
+
     try {
       final XFile? imagen = await _picker.pickImage(
         source: ImageSource.camera,
@@ -105,7 +110,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         maxWidth: 800,
       );
 
-      if (imagen != null) {
+      if (imagen != null && mounted) {
         setState(() {
           _imagenPerfil = File(imagen.path);
           _rutaImagenPerfil = null;
@@ -115,16 +120,21 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         await _subirImagenAlServidor();
       }
     } catch (e) {
-      _mostrarMensajeError('Error al tomar foto: $e');
+      if (!mounted) return;
+      _mostrarMensajeError('Error al tomar foto: intente nuevamente');
     }
   }
 
   /// Sube la imagen seleccionada al servidor
   Future<void> _subirImagenAlServidor() async {
     if (_imagenPerfil == null) {
-      _mostrarMensajeError('Por favor seleccione una imagen primero');
+      if (mounted) {
+        _mostrarMensajeError('Por favor seleccione una imagen primero');
+      }
       return;
     }
+
+    if (!mounted) return;
 
     try {
       setState(() {
@@ -151,12 +161,16 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       // Enviar el request
       final response = await request.send();
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         // Convertir la respuesta a string
         final respuestaString = await response.stream.bytesToString();
         final respuestaJson = json.decode(respuestaString);
 
         // Guardar la ruta de la imagen
+        if (!mounted) return;
+
         setState(() {
           _rutaImagenPerfil = respuestaJson['ruta'];
           _subiendoImagen = false;
@@ -164,12 +178,16 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
         _mostrarMensajeExito('Imagen subida correctamente');
       } else {
+        if (!mounted) return;
+
         setState(() {
           _subiendoImagen = false;
         });
         _mostrarMensajeError('Error al subir imagen: ${response.statusCode}');
       }
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
         _subiendoImagen = false;
       });
@@ -179,26 +197,14 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   /// Muestra un mensaje de error
   void _mostrarMensajeError(String mensaje) {
-    if (!mounted) return;
-
-    Flushbar(
-      message: mensaje,
-      duration: const Duration(seconds: 3),
-      backgroundColor: Colors.red,
-      flushbarPosition: FlushbarPosition.TOP,
-    ).show(context);
+    // Usar el método centralizado para mostrar notificaciones
+    _mostrarError(mensaje);
   }
 
   /// Muestra un mensaje de éxito
   void _mostrarMensajeExito(String mensaje) {
-    if (!mounted) return;
-
-    Flushbar(
-      message: mensaje,
-      duration: const Duration(seconds: 2),
-      backgroundColor: Colors.green,
-      flushbarPosition: FlushbarPosition.TOP,
-    ).show(context);
+    // Usar el método centralizado para mostrar notificaciones
+    _mostrarExito(mensaje);
   }
 
   /// Actualiza el formateador de teléfono según el país seleccionado
@@ -335,27 +341,53 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     // Si hay alguna conexión y no tenemos estados civiles cargados
     // intentamos cargar los datos nuevamente
     if (result != ConnectivityResult.none && _estadosCiviles.isEmpty) {
+      // Verificar si el widget sigue montado
+      if (!mounted) return;
+      
       // Esperamos un momento para asegurarnos de que la conexión sea estable
       await Future.delayed(const Duration(seconds: 1));
+      
+      // Verificar nuevamente si el widget sigue montado
+      if (!mounted) return;
+      
       // Verificamos si realmente hay conexión a internet
       final hasConnection = await _connectivityService.hasConnection();
+      
+      // Verificar nuevamente si el widget sigue montado
+      if (!mounted) return;
+      
       if (hasConnection) {
         // Mostrar notificación de carga con barra de progreso
         _mostrarCargando('Reconectando...');
 
-        // Cargar los estados civiles
-        _cargarEstadosCiviles().then((_) {
-          // Si la carga fue exitosa, mostrar una notificación de éxito
-          if (_estadosCiviles.isNotEmpty && mounted) {
-            _mostrarExito('Conexión restablecida exitosamente');
+        try {
+          // Cargar los estados civiles (esperar a que termine)
+          await _cargarEstadosCiviles();
+          
+          // Verificar si el widget sigue montado y si la carga fue exitosa
+          if (!mounted) return;
+          
+          if (_estadosCiviles.isNotEmpty) {
+            // Usar Future.microtask para asegurar que la notificación se muestre correctamente
+            Future.microtask(() {
+              if (mounted) {
+                _mostrarExito('Conexión restablecida');
+              }
+            });
           }
-        });
+        } catch (e) {
+          // Ignorar errores si el widget ya no está montado
+          if (!mounted) return;
+          debugPrint('Error al reconectar: $e');
+        }
       }
     }
   }
 
   /// Carga los estados civiles desde la caché local o API
   Future<void> _cargarEstadosCiviles() async {
+    if (!mounted) return;
+
     setState(() {
       _cargandoEstadosCiviles = true;
     });
@@ -381,6 +413,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     final hasConnection = await _connectivityService.hasConnection();
 
     if (!hasConnection) {
+      if (!mounted) return;
+
       setState(() {
         _cargandoEstadosCiviles = false;
       });
@@ -400,29 +434,29 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       await _guardarEstadosCivilesEnCache(estadosCiviles);
 
       // Verificamos si el widget todavía está montado antes de actualizar el estado
-      if (mounted) {
-        setState(() {
-          _estadosCiviles = estadosCiviles;
-          _estadoCivilSeleccionado = null;
-          _cargandoEstadosCiviles = false;
-        });
-        debugPrint(
-          'Estados civiles cargados desde API: ${estadosCiviles.length}',
-        );
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _estadosCiviles = estadosCiviles;
+        _estadoCivilSeleccionado = null;
+        _cargandoEstadosCiviles = false;
+      });
+      debugPrint(
+        'Estados civiles cargados desde API: ${estadosCiviles.length}',
+      );
     } catch (e) {
       // Verificamos si el widget todavía está montado antes de actualizar el estado
-      if (mounted) {
-        setState(() {
-          _cargandoEstadosCiviles = false;
-        });
+      if (!mounted) return;
 
-        // Mostrar notificación de error amigable
-        _mostrarError(
-          'No se pudieron cargar las opciones de estado civil. Por favor intente nuevamente.',
-        );
-        debugPrint('Error al cargar estados civiles: $e');
-      }
+      setState(() {
+        _cargandoEstadosCiviles = false;
+      });
+
+      // Mostrar notificación de error amigable
+      _mostrarError(
+        'No se pudieron cargar las opciones de estado civil. Por favor intente nuevamente.',
+      );
+      debugPrint('Error al cargar estados civiles: $e');
     }
   }
 
@@ -489,6 +523,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   /// Carga los departamentos desde la caché local o API
   Future<void> _cargarDepartamentos() async {
+    if (!mounted) return;
+
     setState(() {
       _cargandoDepartamentos = true;
     });
@@ -496,16 +532,16 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     // Intentar cargar desde la caché primero
     final departamentosCached = await _cargarDepartamentosDesdeCache();
     if (departamentosCached.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _departamentos = departamentosCached;
-          _departamentoSeleccionado = null;
-          _cargandoDepartamentos = false;
-        });
-        debugPrint(
-          'Departamentos cargados desde caché: ${departamentosCached.length}',
-        );
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _departamentos = departamentosCached;
+        _departamentoSeleccionado = null;
+        _cargandoDepartamentos = false;
+      });
+      debugPrint(
+        'Departamentos cargados desde caché: ${departamentosCached.length}',
+      );
       return;
     }
 
@@ -513,6 +549,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     final hasConnection = await _connectivityService.hasConnection();
 
     if (!hasConnection) {
+      if (!mounted) return;
+
       setState(() {
         _cargandoDepartamentos = false;
       });
@@ -529,24 +567,24 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       // Guardar en caché para uso futuro
       await _guardarDepartamentosEnCache(departamentos);
 
-      if (mounted) {
-        setState(() {
-          _departamentos = departamentos;
-          _departamentoSeleccionado = null;
-          _cargandoDepartamentos = false;
-        });
-        debugPrint('Departamentos cargados desde API: ${departamentos.length}');
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _departamentos = departamentos;
+        _departamentoSeleccionado = null;
+        _cargandoDepartamentos = false;
+      });
+      debugPrint('Departamentos cargados desde API: ${departamentos.length}');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _cargandoDepartamentos = false;
-        });
-        _mostrarError(
-          'No se pudieron cargar los departamentos. Por favor intente nuevamente.',
-        );
-        debugPrint('Error al cargar departamentos: $e');
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _cargandoDepartamentos = false;
+      });
+      _mostrarError(
+        'No se pudieron cargar los departamentos. Por favor intente nuevamente.',
+      );
+      debugPrint('Error al cargar departamentos: $e');
     }
   }
 
@@ -614,6 +652,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
 
   Future<void> _cargarMunicipiosPorDepartamento() async {
     if (_departamentoSeleccionado == null) return;
+    if (!mounted) return;
 
     final String departamentoCodigo = _departamentoSeleccionado!
         .toString()
@@ -628,22 +667,22 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       departamentoCodigo,
     );
     if (municipiosCached.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          _municipios = municipiosCached;
-          _municipioSeleccionado = null;
-          _cargandoMunicipios = false;
-        });
-        debugPrint(
-          'Municipios cargados desde caché: ${municipiosCached.length}',
-        );
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _municipios = municipiosCached;
+        _municipioSeleccionado = null;
+        _cargandoMunicipios = false;
+      });
+      debugPrint('Municipios cargados desde caché: ${municipiosCached.length}');
       return;
     }
 
     // Verificar conexión a internet
     final hasConnection = await _connectivityService.hasConnection();
     if (!hasConnection) {
+      if (!mounted) return;
+
       setState(() {
         _cargandoMunicipios = false;
       });
@@ -662,24 +701,24 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       // Guardar en caché para uso futuro
       await _guardarMunicipiosEnCache(departamentoCodigo, municipios);
 
-      if (mounted) {
-        setState(() {
-          _municipios = municipios;
-          _municipioSeleccionado = null;
-          _cargandoMunicipios = false;
-        });
-        debugPrint('Municipios cargados desde API: ${municipios.length}');
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _municipios = municipios;
+        _municipioSeleccionado = null;
+        _cargandoMunicipios = false;
+      });
+      debugPrint('Municipios cargados desde API: ${municipios.length}');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _cargandoMunicipios = false;
-        });
-        _mostrarError(
-          'No se pudieron cargar los municipios. Por favor intente nuevamente.',
-        );
-        debugPrint('Error al cargar municipios: $e');
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _cargandoMunicipios = false;
+      });
+      _mostrarError(
+        'No se pudieron cargar los municipios. Por favor intente nuevamente.',
+      );
+      debugPrint('Error al cargar municipios: $e');
     }
   }
 
@@ -772,16 +811,23 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     if (_currentFlushbar != null) {
       // Usar try-catch para evitar errores si la notificación ya está cerrada
       try {
-        _currentFlushbar?.dismiss();
+        // Verificar si la notificación está visible antes de intentar cerrarla
+        if (_currentFlushbar!.isShowing() ?? false) {
+          _currentFlushbar!.dismiss(true); // Usar dismiss(true) para forzar el cierre inmediato
+        }
       } catch (e) {
         // Ignorar errores al cerrar la notificación
-        print('Error al cerrar notificación: $e');
+        debugPrint('Error al cerrar notificación: $e');
+      } finally {
+        // Asegurar que la referencia se limpie en cualquier caso
+        _currentFlushbar = null;
       }
-      // Asegurar que la referencia se limpie
-      _currentFlushbar = null;
     }
 
-    // Crear y mostrar la nueva notificación
+    // Verificar nuevamente si el widget está montado
+    if (!mounted) return;
+
+    // Crear la nueva notificación
     _currentFlushbar = Flushbar(
       message: mensaje,
       icon: Icon(icono, size: 28.0, color: Colors.white),
@@ -808,15 +854,21 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
           _currentFlushbar = null;
         }
       },
+      isDismissible: true, // Permitir que el usuario pueda cerrarla
     );
 
     // Mostrar la notificación de manera segura
-    try {
-      _currentFlushbar!.show(context);
-    } catch (e) {
-      print('Error al mostrar notificación: $e');
-      _currentFlushbar = null;
-    }
+    // Usar Future.microtask para asegurar que se muestre después de cualquier cambio de estado
+    Future.microtask(() {
+      if (mounted && _currentFlushbar != null) {
+        try {
+          _currentFlushbar!.show(context);
+        } catch (e) {
+          debugPrint('Error al mostrar notificación: $e');
+          _currentFlushbar = null;
+        }
+      }
+    });
   }
 
   /// Muestra una notificación de error
@@ -883,6 +935,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
   /// Este método valida todos los campos del formulario, verifica la conexión a internet,
   /// y envía los datos al servidor. Muestra mensajes amigables en caso de error.
   Future<void> _registrarUsuario() async {
+    if (!mounted) return;
+
     // Validar el formulario completo
     if (!_formkey.currentState!.validate()) {
       _mostrarError(
@@ -902,6 +956,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     // Verificar conectividad antes de realizar la solicitud
     final hasConnection = await _connectivityService.hasConnection();
     if (!hasConnection) {
+      if (!mounted) return;
       _mostrarError(
         'No hay conexión a internet. Por favor verifique su conexión e intente nuevamente',
       );
@@ -909,12 +964,14 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     }
 
     // Activar indicador de carga
+    if (!mounted) return;
     setState(() {
       _cargando = true;
     });
 
     // Verificamos que todos los datos obligatorios estén completos
     if (_rutaImagenPerfil == null) {
+      if (!mounted) return;
       setState(() {
         _cargando = false;
       });
@@ -923,6 +980,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     }
 
     if (_estadoCivilSeleccionado == null || _estadoCivilSeleccionado == 0) {
+      if (!mounted) return;
       setState(() {
         _cargando = false;
       });
@@ -931,6 +989,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     }
 
     if (_departamentoSeleccionado == null) {
+      if (!mounted) return;
       setState(() {
         _cargando = false;
       });
@@ -939,6 +998,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     }
 
     if (_municipioSeleccionado == null && _municipios.isNotEmpty) {
+      if (!mounted) return;
       setState(() {
         _cargando = false;
       });
@@ -947,6 +1007,7 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     }
 
     // Mostrar notificación de carga con barra de progreso
+    if (!mounted) return;
     _mostrarCargando('Procesando su registro...');
 
     try {
@@ -984,6 +1045,8 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         usua_Imagen:
             userData['usua_Imagen'] as String?, // Añadir la ruta de la imagen
       );
+
+      if (!mounted) return;
 
       // Cerrar cualquier notificación anterior de manera segura
       if (_currentFlushbar != null) {
@@ -1067,11 +1130,13 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       debugPrint('Error en registro: $e');
       _mostrarError(
         'No se pudo completar el registro. Por favor verifique su conexión e intente nuevamente',
       );
     } finally {
+      if (!mounted) return;
       setState(() {
         _cargando = false;
       });
@@ -1880,234 +1945,289 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
             ],
           ),
         ),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withOpacity(0.2),
-                              blurRadius: 10,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.assignment_outlined,
-                          size: 50,
-                          color: Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      RichText(
-                        textAlign: TextAlign.center,
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'SI',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade800,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'RESP',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Text(
-                        'Sistema de Reportes',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      // TAB DE NAVEGACIÓN
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  Navigator.pushAndRemoveUntil(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder:
-                                          (
-                                            context,
-                                            animation,
-                                            secondaryAnimation,
-                                          ) => const LoginScreen(),
-                                      transitionsBuilder: (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                        child,
-                                      ) {
-                                        var begin = const Offset(
-                                          -1.0,
-                                          0.0,
-                                        ); // Desde la izquierda
-                                        var end = Offset.zero;
-                                        var curve = Curves.easeInOutQuart;
 
-                                        var tween = Tween(
-                                          begin: begin,
-                                          end: end,
-                                        ).chain(CurveTween(curve: curve));
-                                        var offsetAnimation = animation.drive(
-                                          tween,
-                                        );
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _cargarEstadosCiviles();
+            await _cargarDepartamentos();
+            if (_departamentoSeleccionado != null) {
+              await _cargarMunicipiosPorDepartamento();
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.2),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.assignment_outlined,
+                            size: 50,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'SI',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade800,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'RESP',
+                                style: TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Text(
+                          'Sistema de Reportes',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        // TAB DE NAVEGACIÓN
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder:
+                                            (
+                                              context,
+                                              animation,
+                                              secondaryAnimation,
+                                            ) => const LoginScreen(),
+                                        transitionsBuilder: (
+                                          context,
+                                          animation,
+                                          secondaryAnimation,
+                                          child,
+                                        ) {
+                                          var begin = const Offset(
+                                            -1.0,
+                                            0.0,
+                                          ); // Desde la izquierda
+                                          var end = Offset.zero;
+                                          var curve = Curves.easeInOutQuart;
 
-                                        return SlideTransition(
-                                          position: offsetAnimation,
-                                          child: child,
-                                        );
-                                      },
-                                      transitionDuration: const Duration(
-                                        milliseconds: 500,
+                                          var tween = Tween(
+                                            begin: begin,
+                                            end: end,
+                                          ).chain(CurveTween(curve: curve));
+                                          var offsetAnimation = animation.drive(
+                                            tween,
+                                          );
+
+                                          return SlideTransition(
+                                            position: offsetAnimation,
+                                            child: child,
+                                          );
+                                        },
+                                        transitionDuration: const Duration(
+                                          milliseconds: 500,
+                                        ),
+                                      ),
+                                      (route) =>
+                                          false, // Borra todo el historial previo
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        'Iniciar Sesión',
+                                        style: TextStyle(
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                    (route) =>
-                                        false, // Borra todo el historial previo
-                                  );
-                                },
+                                  ),
+                                ),
+                              ),
+                              Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.transparent,
+                                    color: Colors.blue.shade700,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: const Center(
                                     child: Text(
-                                      'Iniciar Sesión',
+                                      'Registrarse',
                                       style: TextStyle(
-                                        color: Colors.black87,
+                                        color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            Expanded(
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Indicador de progreso
+                        Row(
+                          children: List.generate(
+                            _totalPasos,
+                            (index) => Expanded(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
+                                height: 5,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.shade700,
+                                  color:
+                                      index <= _pasoActual
+                                          ? Colors.blue.shade700
+                                          : Colors.grey.shade300,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Center(
-                                  child: Text(
-                                    'Registrarse',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Indicador de progreso
-                      Row(
-                        children: List.generate(
-                          _totalPasos,
-                          (index) => Expanded(
-                            child: Container(
-                              height: 5,
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              decoration: BoxDecoration(
-                                color:
-                                    index <= _pasoActual
-                                        ? Colors.blue.shade700
-                                        : Colors.grey.shade300,
-                                borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Título y descripción del paso actual
-                      Text(
-                        _titulosPasos[_pasoActual],
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                        const SizedBox(height: 20),
+                        // Título y descripción del paso actual
+                        Text(
+                          _titulosPasos[_pasoActual],
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _descripcionesPasos[_pasoActual],
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade700,
+                        const SizedBox(height: 5),
+                        Text(
+                          _descripcionesPasos[_pasoActual],
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      Form(
-                        key: _formkey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _construirContenidoPaso(),
-                            const SizedBox(height: 25),
-                            // Botones de navegación
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                if (_pasoActual > 0)
+                        const SizedBox(height: 20),
+                        Form(
+                          key: _formkey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _construirContenidoPaso(),
+                              const SizedBox(height: 25),
+                              // Botones de navegación
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  if (_pasoActual > 0)
+                                    ElevatedButton.icon(
+                                      onPressed: _pasoAnterior,
+                                      icon: const Icon(Icons.arrow_back),
+                                      label: const Text('Anterior'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.grey.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 15,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    const SizedBox(width: 120),
                                   ElevatedButton.icon(
-                                    onPressed: _pasoAnterior,
-                                    icon: const Icon(Icons.arrow_back),
-                                    label: const Text('Anterior'),
+                                    onPressed:
+                                        _cargando ? null : _siguientePaso,
+                                    icon:
+                                        _cargando
+                                            ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                            : Icon(
+                                              _pasoActual < _totalPasos - 1
+                                                  ? Icons.arrow_forward
+                                                  : Icons.check,
+                                            ),
+                                    label: Text(
+                                      _pasoActual < _totalPasos - 1
+                                          ? 'Siguiente'
+                                          : 'Registrarse',
+                                    ),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.grey.shade600,
+                                      backgroundColor:
+                                          _pasoActual < _totalPasos - 1
+                                              ? Colors.blue.shade700
+                                              : Colors.green.shade700,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 15,
@@ -2117,57 +2237,19 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                  )
-                                else
-                                  const SizedBox(width: 120),
-                                ElevatedButton.icon(
-                                  onPressed: _cargando ? null : _siguientePaso,
-                                  icon:
-                                      _cargando
-                                          ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                          : Icon(
-                                            _pasoActual < _totalPasos - 1
-                                                ? Icons.arrow_forward
-                                                : Icons.check,
-                                          ),
-                                  label: Text(
-                                    _pasoActual < _totalPasos - 1
-                                        ? 'Siguiente'
-                                        : 'Registrarse',
                                   ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        _pasoActual < _totalPasos - 1
-                                            ? Colors.blue.shade700
-                                            : Colors.green.shade700,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 15,
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      // Espacio adicional al final
-                      const SizedBox(height: 20),
-                    ],
+                        // Espacio adicional al final
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

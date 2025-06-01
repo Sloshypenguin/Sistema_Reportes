@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import '../services/reporteService.dart';
 import '../models/reporteViewModel.dart';
-
 
 class PrincipalScreen extends StatefulWidget {
   const PrincipalScreen({super.key});
@@ -25,10 +25,20 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   bool esAdmin = false;
   bool esEmpleado = false;
 
-  // Variables para los reportes
-  List<Reporte> _reportes = [];
+  // Variables para estadísticas
+  int _totalReportes = 0;
+  int _reportesPrioritarios = 0;
+  int _reportesPendientes = 0;
   bool _isLoading = true;
   String? _error;
+
+  // Constantes para paginación
+  static const _pageSize = 10;
+
+  // Controlador de paginación
+  final PagingController<int, Reporte> _pagingController = PagingController(
+    firstPageKey: 1,
+  );
 
   // Mapa para almacenar las imágenes de cada reporte
   Map<int, List<Map<String, dynamic>>> _imagenesPorReporte = {};
@@ -37,30 +47,41 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   @override
   void initState() {
     super.initState();
+    _pagingController.addPageRequestListener(_fetchPage);
     _cargarDatosUsuario();
-    _cargarReportes();
+    _cargarEstadisticas();
   }
 
-  /// Carga los reportes desde el servicio
-  Future<void> _cargarReportes() async {
+  @override
+  void dispose() {
+    _pagingController.dispose();
+    super.dispose();
+  }
+
+  /// Carga las estadísticas generales de reportes
+  Future<void> _cargarEstadisticas() async {
     if (!mounted) return;
-    
+
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      final reportes = await _reporteService.listarReportes();
-      
+      // Obtener todos los reportes para calcular estadísticas
+      final reportes = await _reporteService.listarReportes(
+        page: 1,
+        pageSize: 1000,
+      );
+
       if (!mounted) return;
       setState(() {
-        _reportes = reportes;
+        _totalReportes = reportes.length;
+        _reportesPrioritarios = reportes.where((r) => r.repo_Prioridad).length;
+        _reportesPendientes =
+            reportes.where((r) => r.repo_Estado.toUpperCase() == 'P').length;
         _isLoading = false;
       });
-      
-      // Cargar las imágenes de cada reporte
-      _cargarImagenesReportes(reportes);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -69,30 +90,64 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
       });
     }
   }
-  
+
+  /// Carga una página de reportes para el infinite scroll
+  Future<void> _fetchPage(int pageKey) async {
+    if (!mounted) return;
+
+    try {
+      final reportes = await _reporteService.listarReportes(
+        page: pageKey,
+        pageSize: _pageSize,
+      );
+
+      // Cargar las imágenes de los reportes de esta página
+      _cargarImagenesReportes(reportes);
+
+      final isLastPage = reportes.length < _pageSize;
+
+      if (isLastPage) {
+        _pagingController.appendLastPage(reportes);
+      } else {
+        final nextPageKey = pageKey + 1;
+        _pagingController.appendPage(reportes, nextPageKey);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _pagingController.error = e;
+      setState(() {
+        _error = e.toString();
+      });
+    }
+  }
+
   /// Carga las imágenes para cada reporte
   Future<void> _cargarImagenesReportes(List<Reporte> reportes) async {
     if (!mounted) return;
-    
+
     try {
       setState(() {
         _cargandoImagenes = true;
       });
-      
+
       final imagenesMap = <int, List<Map<String, dynamic>>>{};
-      
+
       for (final reporte in reportes) {
         if (!mounted) return;
-        
+
         try {
-          final imagenes = await _reporteService.obtenerImagenesPorReporte(reporte.repo_Id);
+          final imagenes = await _reporteService.obtenerImagenesPorReporte(
+            reporte.repo_Id,
+          );
           imagenesMap[reporte.repo_Id] = imagenes;
         } catch (e) {
-          debugPrint('Error al cargar imágenes para reporte ${reporte.repo_Id}: $e');
+          debugPrint(
+            'Error al cargar imágenes para reporte ${reporte.repo_Id}: $e',
+          );
           // Continuar con el siguiente reporte si hay un error
         }
       }
-      
+
       if (!mounted) return;
       setState(() {
         _imagenesPorReporte = imagenesMap;
@@ -109,7 +164,30 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
   /// Refresca la lista de reportes
   Future<void> _refrescarReportes() async {
-    await _cargarReportes();
+    if (!mounted) return;
+
+    try {
+      // Mostrar indicador de carga
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Actualizar estadísticas
+      await _cargarEstadisticas();
+
+      // Reiniciar el controlador de paginación
+      _pagingController.refresh();
+
+      return Future.value();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+      return Future.error(e);
+    }
   }
 
   Future<void> _cargarDatosUsuario() async {
@@ -147,11 +225,13 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   IconData _getIconoEstado(String estado) {
     switch (estado.toUpperCase()) {
       case 'P':
-        return Icons.pending;
-      case 'C':
-        return Icons.check_circle;
+        return Icons.pending; // Pendiente
+      case 'G':
+        return Icons.build_circle; // En Gestión
       case 'R':
-        return Icons.cancel;
+        return Icons.check_circle; // Resuelto
+      case 'C':
+        return Icons.cancel; // Cancelado
       default:
         return Icons.help_outline;
     }
@@ -161,11 +241,13 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   Color _getColorEstado(String estado) {
     switch (estado.toUpperCase()) {
       case 'P':
-        return Colors.orange;
-      case 'C':
-        return Colors.green;
+        return Colors.orange; // Pendiente
+      case 'G':
+        return Colors.blue; // En Gestión
       case 'R':
-        return Colors.red;
+        return Colors.green; // Resuelto
+      case 'C':
+        return Colors.red; // Cancelado
       default:
         return Colors.grey;
     }
@@ -176,10 +258,12 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     switch (estado.toUpperCase()) {
       case 'P':
         return 'Pendiente';
-      case 'C':
-        return 'Completado';
+      case 'G':
+        return 'En Gestión';
       case 'R':
-        return 'Rechazado';
+        return 'Resuelto';
+      case 'C':
+        return 'Cancelado';
       default:
         return 'Desconocido';
     }
@@ -207,7 +291,10 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade600,
                       borderRadius: BorderRadius.circular(12),
@@ -241,9 +328,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               // Descripción del reporte
               Text(
                 reporte.repo_Descripcion,
@@ -255,14 +342,14 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               // Imágenes del reporte
               _buildImagenesReporte(reporte.repo_Id),
-              
+
               const SizedBox(height: 8),
-              
+
               // Información del servicio
               Row(
                 children: [
@@ -280,9 +367,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               // Información de la persona reportante
               Row(
                 children: [
@@ -299,24 +386,32 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               // Footer con prioridad
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: reporte.repo_Prioridad ? Colors.red.shade600 : Colors.green.shade600,
+                      color:
+                          reporte.repo_Prioridad
+                              ? Colors.red.shade600
+                              : Colors.green.shade600,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          reporte.repo_Prioridad ? Icons.priority_high : Icons.low_priority,
+                          reporte.repo_Prioridad
+                              ? Icons.priority_high
+                              : Icons.low_priority,
                           color: Colors.white,
                           size: 16,
                         ),
@@ -350,30 +445,35 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   void _mostrarDetallesReporte(Reporte reporte) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Reporte #${reporte.repo_Id}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDetalleItem('Descripción:', reporte.repo_Descripcion),
-              _buildDetalleItem('Servicio:', reporte.serv_Nombre),
-              _buildDetalleItem('Reportado por:', reporte.persona),
-              _buildDetalleItem('Estado:', _getTextoEstado(reporte.repo_Estado)),
-              _buildDetalleItem('Prioridad:', reporte.prioridad),
-              if (reporte.repo_Ubicacion != null && reporte.repo_Ubicacion!.isNotEmpty)
-                _buildDetalleItem('Ubicación:', reporte.repo_Ubicacion!),
+      builder:
+          (context) => AlertDialog(
+            title: Text('Reporte #${reporte.repo_Id}'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildDetalleItem('Descripción:', reporte.repo_Descripcion),
+                  _buildDetalleItem('Servicio:', reporte.serv_Nombre),
+                  _buildDetalleItem('Reportado por:', reporte.persona),
+                  _buildDetalleItem(
+                    'Estado:',
+                    _getTextoEstado(reporte.repo_Estado),
+                  ),
+                  _buildDetalleItem('Prioridad:', reporte.prioridad),
+                  if (reporte.repo_Ubicacion != null &&
+                      reporte.repo_Ubicacion!.isNotEmpty)
+                    _buildDetalleItem('Ubicación:', reporte.repo_Ubicacion!),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -386,15 +486,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14),
-          ),
+          Text(value, style: const TextStyle(fontSize: 14)),
           const SizedBox(height: 4),
         ],
       ),
@@ -404,7 +498,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   /// Widget para mostrar las imágenes de un reporte
   Widget _buildImagenesReporte(int reporteId) {
     final imagenes = _imagenesPorReporte[reporteId] ?? [];
-    
+
     if (_cargandoImagenes && imagenes.isEmpty) {
       return const SizedBox(
         height: 40,
@@ -417,11 +511,11 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         ),
       );
     }
-    
+
     if (imagenes.isEmpty) {
       return const SizedBox.shrink(); // No mostrar nada si no hay imágenes
     }
-    
+
     return SizedBox(
       height: 120,
       child: ListView.builder(
@@ -430,14 +524,16 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         itemBuilder: (context, index) {
           final imagen = imagenes[index];
           final imagenUrl = imagen['imre_Imagen'];
-          
+
           return Container(
             width: 120,
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               image: DecorationImage(
-                image: NetworkImage('http://sistemareportesgob.somee.com$imagenUrl'),
+                image: NetworkImage(
+                  'http://sistemareportesgob.somee.com$imagenUrl',
+                ),
                 fit: BoxFit.cover,
               ),
             ),
@@ -463,10 +559,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         ),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
     );
@@ -475,152 +568,185 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoading
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Cargando reportes...'),
-                ],
-              ),
-            )
-          : _error != null
+      body:
+          _isLoading
+              ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Cargando reportes...'),
+                  ],
+                ),
+              )
+              : _error != null
               ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red.shade400,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red.shade400,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error al cargar reportes',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error al cargar reportes',
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _refrescarReportes,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Intentar nuevamente'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              : Column(
+                children: [
+                  // Header con información de estadísticas
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.blue.shade600, Colors.blue.shade400],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.shade200,
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Resumen de Reportes',
                           style: TextStyle(
+                            color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.red.shade700,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _refrescarReportes,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Intentar nuevamente'),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildEstadisticaItem(
+                              'Total',
+                              _totalReportes.toString(),
+                              Icons.list_alt,
+                            ),
+                            _buildEstadisticaItem(
+                              'Prioritarios',
+                              _reportesPrioritarios.toString(),
+                              Icons.priority_high,
+                            ),
+                            _buildEstadisticaItem(
+                              'Pendientes',
+                              _reportesPendientes.toString(),
+                              Icons.pending,
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                )
-              : _reportes.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.inbox_outlined,
-                            size: 64,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No hay reportes disponibles',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _refrescarReportes,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Actualizar'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
+
+                  // Lista de reportes con paginación
+                  Expanded(
+                    child: RefreshIndicator(
                       onRefresh: _refrescarReportes,
-                      child: Column(
-                        children: [
-                          // Header con información de estadísticas
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.all(16),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Colors.blue.shade600, Colors.blue.shade400],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.blue.shade200,
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                const Text(
-                                  'Resumen de Reportes',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      child: PagedListView<int, Reporte>(
+                        pagingController: _pagingController,
+                        builderDelegate: PagedChildBuilderDelegate<Reporte>(
+                          itemBuilder:
+                              (context, reporte, index) =>
+                                  _buildReporteCard(reporte),
+                          firstPageErrorIndicatorBuilder:
+                              (_) => Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    _buildEstadisticaItem(
-                                      'Total',
-                                      _reportes.length.toString(),
-                                      Icons.list_alt,
+                                    Icon(
+                                      Icons.error_outline,
+                                      size: 64,
+                                      color: Colors.red.shade400,
                                     ),
-                                    _buildEstadisticaItem(
-                                      'Prioritarios',
-                                      _reportes.where((r) => r.repo_Prioridad).length.toString(),
-                                      Icons.priority_high,
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Error al cargar reportes',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.red.shade700,
+                                      ),
                                     ),
-                                    _buildEstadisticaItem(
-                                      'Pendientes',
-                                      _reportes.where((r) => r.repo_Estado.toUpperCase() == 'P').length.toString(),
-                                      Icons.pending,
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      onPressed:
+                                          () => _pagingController.refresh(),
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('Intentar nuevamente'),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          
-                          // Lista de reportes
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: _reportes.length,
-                              itemBuilder: (context, index) {
-                                return _buildReporteCard(_reportes[index]);
-                              },
-                            ),
-                          ),
-                        ],
+                              ),
+                          noItemsFoundIndicatorBuilder:
+                              (_) => Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.inbox_outlined,
+                                      size: 64,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No hay reportes disponibles',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          newPageProgressIndicatorBuilder:
+                              (_) => const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                        ),
                       ),
                     ),
+                  ),
+                ],
+              ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'crear_reporte',
         onPressed: () {
@@ -632,10 +758,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         icon: const Icon(Icons.add_circle_outline),
         label: const Text(
           'Crear Reporte',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ),
     );
