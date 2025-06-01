@@ -1,46 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:sistema_reportes/services/auth_service.dart';
-import '../models/reporteViewModel.dart';
 import '../services/reporteService.dart';
-import 'package:sistema_reportes/layout/plantilla_base.dart';
+import 'google_maps.dart';
 import '../models/servicioViewModel.dart';
 import '../services/servicioService.dart';
 
 class reporteCrear extends StatefulWidget {
   final String titulo;
-  
-  const reporteCrear({
-    super.key,
-    required this.titulo,
-  });
+
+  const reporteCrear({super.key, required this.titulo});
 
   @override
   State<reporteCrear> createState() => _reporteCrearState();
 }
 
-class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMixin {
+class _reporteCrearState extends State<reporteCrear>
+    with TickerProviderStateMixin {
   // Controllers para los campos del formulario
   final _formKey = GlobalKey<FormState>();
-  final _descripcionController = TextEditingController();
-  final _ubicacionController = TextEditingController();
-  final _personaIdController = TextEditingController();
-  final _servicioIdController = TextEditingController();
-  
-  
+  final TextEditingController _descripcionController = TextEditingController();
+  final TextEditingController _ubicacionController = TextEditingController();
+  final TextEditingController _personaIdController = TextEditingController();
+  final TextEditingController _servicioIdController = TextEditingController();
+
+  // Variables para almacenar las coordenadas de la ubicación seleccionada
+  double? _latitud;
+  double? _longitud;
+
   // Variables para el dropdown de servicios
   List<Servicio> _servicios = [];
   Servicio? _servicioSeleccionado;
-  
+
   // Variables de estado
   bool _cargando = false;
   bool _guardando = false;
   bool _prioridad = false;
   bool _redirigiendo = false;
   bool _cargandoServicios = false;
-  
+
   // Valores fijos temporales
   final int _usuaCreacion = 1; // Usuario fijo por ahora
-  
+
   // Animaciones
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -50,7 +50,7 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
   void initState() {
     super.initState();
     _setupAnimations();
-    
+
     // Cargar datos después de que el widget esté montado
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargarDatos();
@@ -62,55 +62,49 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-    
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
-    
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
+    );
+
     _animationController.forward();
   }
-  
+
   Future<void> _cargarDatos() async {
     try {
       setState(() {
         _cargando = true;
         _cargandoServicios = true;
       });
-      
+
       // Cargar servicios desde la API
       final servicioService = ServicioService();
       final servicios = await servicioService.listarServiciosActivos();
-      
+
       print('=== DEBUG CARGAR SERVICIOS ===');
       print('Servicios cargados: ${servicios.length}');
       for (var servicio in servicios) {
         print('ID: ${servicio.serv_Id}, Nombre: ${servicio.serv_Nombre}');
       }
       print('==============================');
-      
+
       setState(() {
         _servicios = servicios;
         _cargandoServicios = false;
         _cargando = false;
       });
-      
+
       // Si no hay servicios, mostrar mensaje
       if (servicios.isEmpty) {
         _mostrarError('No hay servicios disponibles');
       }
-      
     } catch (e) {
       setState(() {
         _cargando = false;
@@ -127,6 +121,12 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       return;
     }
 
+    // Validar que se haya seleccionado una ubicación
+    if (_ubicacionController.text.isEmpty) {
+      _mostrarError('Por favor selecciona una ubicación en el mapa');
+      return;
+    }
+
     try {
       setState(() {
         _guardando = true;
@@ -135,13 +135,21 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       // Crear instancia del servicio
       final reporteService = ReporteService();
       final personaId = await AuthService.obtenerPersonaId();
-      
+
+      // Preparar información de ubicación
+      String ubicacionInfo = _ubicacionController.text.trim();
+
+      // Si tenemos coordenadas, añadirlas a la información de ubicación
+      if (_latitud != null && _longitud != null) {
+        ubicacionInfo += ' [Lat: $_latitud, Lng: $_longitud]';
+      }
+
       // Llamar al método real del servicio
       final resultado = await reporteService.crearReporte(
-        personaId: int.tryParse(personaId?? "") ?? 0,
+        personaId: int.tryParse(personaId ?? "") ?? 0,
         servicioId: _servicioSeleccionado?.serv_Id ?? 0,
         descripcion: _descripcionController.text.trim(),
-        ubicacion: _ubicacionController.text.trim().isEmpty ? '' : _ubicacionController.text.trim(),
+        ubicacion: ubicacionInfo,
         esPrioritario: _prioridad,
         usuarioCreacion: _usuaCreacion,
       );
@@ -152,14 +160,16 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
 
       // Verificar si fue exitoso
       if (resultado['success'] == true) {
-        _mostrarExito('Reporte creado exitosamente. ID: ${resultado['reporteId']}');
+        _mostrarExito(
+          'Reporte creado exitosamente. ID: ${resultado['reporteId']}',
+        );
         _limpiarFormulario();
-        
+
         // Mostrar estado de redirección
         setState(() {
           _redirigiendo = true;
         });
-        
+
         // Redirigir a la lista de reportes después de un breve delay
         Future.delayed(const Duration(seconds: 2), () {
           Navigator.pushReplacementNamed(context, '/principal');
@@ -167,15 +177,14 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       } else {
         _mostrarError('Error: ${resultado['message']}');
       }
-      
     } catch (e) {
       setState(() {
         _guardando = false;
       });
-      
+
       // Manejo de errores más específico
       String mensajeError = 'Error desconocido';
-      
+
       if (e.toString().contains('Sin conexión a internet')) {
         mensajeError = 'Sin conexión a internet. Verifica tu conexión.';
       } else if (e.toString().contains('Error al crear reporte')) {
@@ -183,7 +192,7 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       } else {
         mensajeError = 'Error: ${e.toString()}';
       }
-      
+
       _mostrarError(mensajeError);
       debugPrint('Error completo en _guardarReporte: $e');
     }
@@ -208,7 +217,9 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
     print('=== DEBUG ESTADO SERVICIOS ===');
     print('_cargandoServicios: $_cargandoServicios');
     print('_servicios.length: ${_servicios.length}');
-    print('_servicioSeleccionado: ${_servicioSeleccionado?.serv_Nombre ?? 'null'}');
+    print(
+      '_servicioSeleccionado: ${_servicioSeleccionado?.serv_Nombre ?? 'null'}',
+    );
     if (_servicios.isNotEmpty) {
       print('Primer servicio: ${_servicios.first.serv_Nombre}');
     }
@@ -266,10 +277,10 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
       children: [
         _buildSectionTitle('Servicio'),
         const SizedBox(height: 10),
-        
+
         // Mostrar indicador de carga o dropdown
-        _cargandoServicios 
-          ? Container(
+        _cargandoServicios
+            ? Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey[300]!),
@@ -288,12 +299,13 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                 ],
               ),
             )
-          : DropdownButtonFormField<Servicio>(
+            : DropdownButtonFormField<Servicio>(
               value: _servicioSeleccionado,
               decoration: InputDecoration(
-                hintText: _servicios.isEmpty 
-                  ? 'No hay servicios disponibles' 
-                  : 'Selecciona un servicio',
+                hintText:
+                    _servicios.isEmpty
+                        ? 'No hay servicios disponibles'
+                        : 'Selecciona un servicio',
                 prefixIcon: const Icon(Icons.build, color: Colors.orange),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -310,22 +322,32 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                 filled: true,
                 fillColor: Colors.grey[50],
               ),
-              items: _servicios.isEmpty 
-                ? null 
-                : _servicios.map((servicio) => DropdownMenuItem<Servicio>(
-                    value: servicio,
-                    child: Text(
-                      servicio.serv_Nombre,
-                      style: const TextStyle(fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )).toList(),
-              onChanged: _servicios.isEmpty ? null : (Servicio? servicio) {
-                setState(() {
-                  _servicioSeleccionado = servicio;
-                });
-                print('Servicio seleccionado: ${servicio?.serv_Nombre} (ID: ${servicio?.serv_Id})');
-              },
+              items:
+                  _servicios.isEmpty
+                      ? null
+                      : _servicios
+                          .map(
+                            (servicio) => DropdownMenuItem<Servicio>(
+                              value: servicio,
+                              child: Text(
+                                servicio.serv_Nombre,
+                                style: const TextStyle(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+              onChanged:
+                  _servicios.isEmpty
+                      ? null
+                      : (Servicio? servicio) {
+                        setState(() {
+                          _servicioSeleccionado = servicio;
+                        });
+                        print(
+                          'Servicio seleccionado: ${servicio?.serv_Nombre} (ID: ${servicio?.serv_Id})',
+                        );
+                      },
               validator: (value) {
                 if (value == null) {
                   return 'Debes seleccionar un servicio';
@@ -481,9 +503,9 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 25),
-                  
+
                   // Formulario
                   Container(
                     padding: const EdgeInsets.all(25),
@@ -501,8 +523,6 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-
-
                         const SizedBox(height: 20),
 
                         // Campo Servicio - DROPDOWN CORREGIDO
@@ -517,10 +537,14 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                           controller: _descripcionController,
                           maxLines: 4,
                           decoration: InputDecoration(
-                            hintText: 'Describe detalladamente el problema o situación...',
+                            hintText:
+                                'Describe detalladamente el problema o situación...',
                             prefixIcon: const Padding(
                               padding: EdgeInsets.only(bottom: 60),
-                              child: Icon(Icons.description, color: Colors.green),
+                              child: Icon(
+                                Icons.description,
+                                color: Colors.green,
+                              ),
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -532,7 +556,10 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.blue, width: 2),
+                              borderSide: const BorderSide(
+                                color: Colors.blue,
+                                width: 2,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.grey[50],
@@ -551,13 +578,116 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                         const SizedBox(height: 20),
 
                         // Campo Ubicación
-                        _buildSectionTitle('Ubicación'),
+                        Row(
+                          children: [
+                            Expanded(child: _buildSectionTitle('Ubicación')),
+                            InkWell(
+                              onTap: () async {
+                                // Navegar a la pantalla de Google Maps en modo selección
+                                final resultado = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const GoogleMapsScreen(
+                                          seleccionarUbicacion: true,
+                                        ),
+                                  ),
+                                );
+
+                                // Si se seleccionó una ubicación, actualizar el campo
+                                if (resultado != null &&
+                                    resultado is Map<String, dynamic>) {
+                                  setState(() {
+                                    // Guardar las coordenadas para usarlas al enviar el reporte
+                                    _latitud = resultado['latitud'];
+                                    _longitud = resultado['longitud'];
+
+                                    // Mostrar la dirección en el campo de texto
+                                    _ubicacionController.text =
+                                        resultado['direccion'];
+                                  });
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.blue[200]!),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.map,
+                                      size: 16,
+                                      color: Colors.blue,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Seleccionar en mapa',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 10),
                         TextFormField(
                           controller: _ubicacionController,
+                          readOnly:
+                              true, // Hacerlo de solo lectura para que se seleccione desde el mapa
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Por favor selecciona una ubicación';
+                            }
+                            return null;
+                          },
                           decoration: InputDecoration(
-                            hintText: 'Ubicación del problema...',
-                            prefixIcon: const Icon(Icons.location_on, color: Colors.red),
+                            hintText: 'Selecciona la ubicación del problema...',
+                            prefixIcon: const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.map, color: Colors.blue),
+                              onPressed: () async {
+                                // Navegar a la pantalla de Google Maps en modo selección
+                                final resultado = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => const GoogleMapsScreen(
+                                          seleccionarUbicacion: true,
+                                        ),
+                                  ),
+                                );
+
+                                // Si se seleccionó una ubicación, actualizar el campo
+                                if (resultado != null &&
+                                    resultado is Map<String, dynamic>) {
+                                  setState(() {
+                                    // Guardar las coordenadas para usarlas al enviar el reporte
+                                    _latitud = resultado['latitud'];
+                                    _longitud = resultado['longitud'];
+
+                                    // Mostrar la dirección en el campo de texto
+                                    _ubicacionController.text =
+                                        resultado['direccion'];
+                                  });
+                                }
+                              },
+                              tooltip: 'Seleccionar en el mapa',
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(color: Colors.grey[300]!),
@@ -568,11 +698,40 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.blue, width: 2),
+                              borderSide: const BorderSide(
+                                color: Colors.blue,
+                                width: 2,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.grey[50],
                           ),
+                          onTap: () async {
+                            // Al tocar el campo, abrir el mapa
+                            final resultado = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const GoogleMapsScreen(
+                                      seleccionarUbicacion: true,
+                                    ),
+                              ),
+                            );
+
+                            // Si se seleccionó una ubicación, actualizar el campo
+                            if (resultado != null &&
+                                resultado is Map<String, dynamic>) {
+                              setState(() {
+                                // Guardar las coordenadas para usarlas al enviar el reporte
+                                _latitud = resultado['latitud'];
+                                _longitud = resultado['longitud'];
+
+                                // Mostrar la dirección en el campo de texto
+                                _ubicacionController.text =
+                                    resultado['direccion'];
+                              });
+                            }
+                          },
                         ),
 
                         const SizedBox(height: 20),
@@ -635,11 +794,16 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                             // Botón Cancelar
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: _guardando ? null : () {
-                                  Navigator.pop(context);
-                                },
+                                onPressed:
+                                    _guardando
+                                        ? null
+                                        : () {
+                                          Navigator.pop(context);
+                                        },
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
                                   side: const BorderSide(color: Colors.grey),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -655,69 +819,83 @@ class _reporteCrearState extends State<reporteCrear> with TickerProviderStateMix
                                 ),
                               ),
                             ),
-                            
+
                             const SizedBox(width: 15),
-                            
+
                             // Botón Guardar
                             Expanded(
                               flex: 2,
                               child: ElevatedButton(
-                                onPressed: (_guardando || _redirigiendo) ? null : _guardarReporte,
+                                onPressed:
+                                    (_guardando || _redirigiendo)
+                                        ? null
+                                        : _guardarReporte,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue[600],
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   elevation: 3,
                                 ),
-                                child: _guardando
-                                  ? const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text(
-                                          'Guardando...',
+                                child:
+                                    _guardando
+                                        ? const Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(Colors.white),
+                                              ),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Guardando...',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                        : _redirigiendo
+                                        ? const Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.check,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Redirigiendo...',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                        : const Text(
+                                          'Crear Reporte',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
                                             color: Colors.white,
                                           ),
                                         ),
-                                      ],
-                                    )
-                                  : _redirigiendo
-                                    ? const Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.check, color: Colors.white),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Redirigiendo...',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const Text(
-                                        'Crear Reporte',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      ),
                               ),
                             ),
                           ],

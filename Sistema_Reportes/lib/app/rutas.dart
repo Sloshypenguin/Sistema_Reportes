@@ -6,6 +6,7 @@ import '../screens/mi_perfil.dart';
 import '../layout/plantilla_base.dart';
 import '../widgets/plantilla_widget.dart';
 import '../screens/reporteCrear.dart';
+import '../screens/google_maps.dart';
 
 Route<dynamic> generarRuta(RouteSettings settings) {
   Widget pagina;
@@ -51,6 +52,14 @@ Route<dynamic> generarRuta(RouteSettings settings) {
         titulo: 'Plantilla Widget',
         mostrarBotonRegresar: true,
         child: PlantillaWidget(titulo: 'Ejemplo de Plantilla'),
+      );
+      break;
+      
+    case '/google_maps':
+      pagina = const PlantillaBase(
+        titulo: 'Google Maps',
+        mostrarBotonRegresar: true,
+        child: GoogleMapsScreen(),
       );
       break;
 

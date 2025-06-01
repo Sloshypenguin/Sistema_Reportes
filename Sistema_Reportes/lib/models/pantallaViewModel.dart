@@ -32,6 +32,8 @@ class Pantalla {
         return Icons.person;
       case 'Icons.widgets':
         return Icons.widgets;
+      case 'Icons.map':
+        return Icons.map;
       default:
         return Icons.help_outline;
     }

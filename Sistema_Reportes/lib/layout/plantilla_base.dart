@@ -177,6 +177,14 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                 },
               ),
             ),
+            // Opción de Google Maps añadida manualmente
+            ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('Google Maps'),
+              onTap: () {
+                Navigator.pushReplacementNamed(context, '/google_maps');
+              },
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
