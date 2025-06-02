@@ -88,12 +88,6 @@ class _reporteCrearState extends State<reporteCrear>
       final servicioService = ServicioService();
       final servicios = await servicioService.listarServiciosActivos();
 
-      print('=== DEBUG CARGAR SERVICIOS ===');
-      print('Servicios cargados: ${servicios.length}');
-      for (var servicio in servicios) {
-        print('ID: ${servicio.serv_Id}, Nombre: ${servicio.serv_Nombre}');
-      }
-      print('==============================');
 
       setState(() {
         _servicios = servicios;
@@ -207,23 +201,6 @@ class _reporteCrearState extends State<reporteCrear>
       _prioridad = false;
       _servicioSeleccionado = null;
     });
-  }
-
-  Future<void> _refrescarServicios() async {
-    await _cargarDatos();
-  }
-
-  void _debugServicios() {
-    print('=== DEBUG ESTADO SERVICIOS ===');
-    print('_cargandoServicios: $_cargandoServicios');
-    print('_servicios.length: ${_servicios.length}');
-    print(
-      '_servicioSeleccionado: ${_servicioSeleccionado?.serv_Nombre ?? 'null'}',
-    );
-    if (_servicios.isNotEmpty) {
-      print('Primer servicio: ${_servicios.first.serv_Nombre}');
-    }
-    print('==============================');
   }
 
   void _mostrarError(String mensaje) {
@@ -578,161 +555,135 @@ class _reporteCrearState extends State<reporteCrear>
                         const SizedBox(height: 20),
 
                         // Campo Ubicación
-                        Row(
-                          children: [
-                            Expanded(child: _buildSectionTitle('Ubicación')),
-                            InkWell(
-                              onTap: () async {
-                                // Navegar a la pantalla de Google Maps en modo selección
-                                final resultado = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => const GoogleMapsScreen(
-                                          seleccionarUbicacion: true,
-                                        ),
-                                  ),
-                                );
+                       Row(
+  children: [
+    Expanded(child: _buildSectionTitle('Ubicación')),
+    InkWell(
+      onTap: () async {
+        // Navegar a la pantalla de Google Maps en modo selección
+        final resultado = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const GoogleMapsScreen(
+              seleccionarUbicacion: true,
+            ),
+          ),
+        );
 
-                                // Si se seleccionó una ubicación, actualizar el campo
-                                if (resultado != null &&
-                                    resultado is Map<String, dynamic>) {
-                                  setState(() {
-                                    // Guardar las coordenadas para usarlas al enviar el reporte
-                                    _latitud = resultado['latitud'];
-                                    _longitud = resultado['longitud'];
+        // Si se seleccionó una ubicación, actualizar el campo
+        if (resultado != null && resultado is Map<String, dynamic>) {
+          setState(() {
+            // Guardar las coordenadas para usarlas al enviar el reporte
+            _latitud = resultado['latitud'];
+            _longitud = resultado['longitud'];
 
-                                    // Mostrar la dirección en el campo de texto
-                                    _ubicacionController.text =
-                                        resultado['direccion'];
-                                  });
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue[50],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.blue[200]!),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.map,
-                                      size: 16,
-                                      color: Colors.blue,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Seleccionar en mapa',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.blue,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _ubicacionController,
-                          readOnly:
-                              true, // Hacerlo de solo lectura para que se seleccione desde el mapa
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Por favor selecciona una ubicación';
-                            }
-                            return null;
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Selecciona la ubicación del problema...',
-                            prefixIcon: const Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                            ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.map, color: Colors.blue),
-                              onPressed: () async {
-                                // Navegar a la pantalla de Google Maps en modo selección
-                                final resultado = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => const GoogleMapsScreen(
-                                          seleccionarUbicacion: true,
-                                        ),
-                                  ),
-                                );
-
-                                // Si se seleccionó una ubicación, actualizar el campo
-                                if (resultado != null &&
-                                    resultado is Map<String, dynamic>) {
-                                  setState(() {
-                                    // Guardar las coordenadas para usarlas al enviar el reporte
-                                    _latitud = resultado['latitud'];
-                                    _longitud = resultado['longitud'];
-
-                                    // Mostrar la dirección en el campo de texto
-                                    _ubicacionController.text =
-                                        resultado['direccion'];
-                                  });
-                                }
-                              },
-                              tooltip: 'Seleccionar en el mapa',
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
-                                color: Colors.blue,
-                                width: 2,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                          ),
-                          onTap: () async {
-                            // Al tocar el campo, abrir el mapa
-                            final resultado = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => const GoogleMapsScreen(
-                                      seleccionarUbicacion: true,
-                                    ),
-                              ),
-                            );
-
-                            // Si se seleccionó una ubicación, actualizar el campo
-                            if (resultado != null &&
-                                resultado is Map<String, dynamic>) {
-                              setState(() {
-                                // Guardar las coordenadas para usarlas al enviar el reporte
-                                _latitud = resultado['latitud'];
-                                _longitud = resultado['longitud'];
-
-                                // Mostrar la dirección en el campo de texto
-                                _ubicacionController.text =
-                                    resultado['direccion'];
-                              });
-                            }
-                          },
-                        ),
+            // Mostrar la dirección en el campo de texto
+            _ubicacionController.text = resultado['direccion'];
+          });
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.blue[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue[200]!),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.map,
+              size: 18,
+              color: Colors.blue[700],
+            ),
+            SizedBox(width: 6),
+            Text(
+              'Abrir Mapa',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.blue[700],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ],
+),
+const SizedBox(height: 10),
+TextFormField(
+  controller: _ubicacionController,
+  readOnly: true, // Solo lectura para que se seleccione desde el mapa
+  validator: (value) {
+    if (value == null || value.isEmpty) {
+      return 'Por favor selecciona una ubicación en el mapa';
+    }
+    return null;
+  },
+  decoration: InputDecoration(
+    hintText: 'Toca "Abrir Mapa" para seleccionar la ubicación...',
+    hintStyle: TextStyle(
+      color: Colors.grey[500],
+      fontSize: 14,
+    ),
+    prefixIcon: Icon(
+      Icons.location_on,
+      color: _ubicacionController.text.isNotEmpty 
+          ? Colors.green[600] 
+          : Colors.grey[400],
+    ),
+    suffixIcon: _ubicacionController.text.isNotEmpty
+        ? Icon(
+            Icons.check_circle,
+            color: Colors.green[600],
+          )
+        : Icon(
+            Icons.map_outlined,
+            color: Colors.grey[400],
+          ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.grey[300]!),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(
+        color: _ubicacionController.text.isNotEmpty
+            ? Colors.green[300]!
+            : Colors.grey[300]!,
+      ),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(
+        color: Colors.blue[600]!,
+        width: 2,
+      ),
+    ),
+    filled: true,
+    fillColor: _ubicacionController.text.isNotEmpty
+        ? Colors.green[50]
+        : Colors.grey[50],
+    contentPadding: const EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 12,
+    ),
+  ),
+  style: TextStyle(
+    fontSize: 14,
+    color: _ubicacionController.text.isNotEmpty
+        ? Colors.black87
+        : Colors.grey[600],
+    fontWeight: _ubicacionController.text.isNotEmpty
+        ? FontWeight.w500
+        : FontWeight.normal,
+  ),
+),
 
                         const SizedBox(height: 20),
 

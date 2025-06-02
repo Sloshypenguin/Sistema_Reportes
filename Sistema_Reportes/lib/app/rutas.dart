@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../screens/login.dart';
 import '../screens/principal.dart';
 import '../screens/mi_perfil.dart';
+import '../screens/reporteEdit.dart';
 // import '../screens/reportes.dart';
 import '../layout/plantilla_base.dart';
 import '../widgets/plantilla_widget.dart';
@@ -22,6 +23,14 @@ Route<dynamic> generarRuta(RouteSettings settings) {
         titulo: 'Página Principal',
         mostrarBotonRegresar: false,
         child: PrincipalScreen(),
+      );
+      break;
+
+       case '/EditarReporte':
+      pagina = const PlantillaBase(
+        titulo: 'Editar Reporte',
+        mostrarBotonRegresar: false,
+         child: ReporteEdit(titulo: 'Editar Reporte'),
       );
       break;
 

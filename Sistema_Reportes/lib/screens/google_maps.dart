@@ -707,6 +707,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
               right: 16,
               child: Container(
                 decoration: BoxDecoration(
+                  
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [
@@ -721,34 +722,39 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Barra superior con título y botón para contraer/expandir
-                    InkWell(
-                      onTap: () {
-                        setState(() {
-                          _isInfoPanelVisible = !_isInfoPanelVisible;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Ubicación seleccionada',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Icon(
-                              _isInfoPanelVisible
-                                  ? Icons.keyboard_arrow_down
-                                  : Icons.keyboard_arrow_up,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+             Material(
+  color: Colors.white, // o Colors.transparent si prefieres
+  borderRadius: BorderRadius.circular(8),
+  elevation: 2,
+  child: InkWell(
+    borderRadius: BorderRadius.circular(8),
+    onTap: () {
+      setState(() {
+        _isInfoPanelVisible = !_isInfoPanelVisible;
+      });
+    },
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Icon(
+            _isInfoPanelVisible ? Icons.expand_less : Icons.expand_more,
+            color: Colors.black54,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _isInfoPanelVisible ? 'Ocultar información' : 'Mostrar información',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+),
+
 
                     // Contenido del panel (visible solo si _isInfoPanelVisible es true)
                     if (_isInfoPanelVisible)
