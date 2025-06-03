@@ -3,17 +3,128 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import '../services/reporteService.dart';
 import '../models/reporteViewModel.dart';
+import '../models/reporteDetalleViewModel.dart';
+import '../services/reporteDetalleService.dart';
+import '../screens/reporteDetalleCrear.dart';
+import '../layout/plantilla_base.dart';
+
+
 
 class PrincipalScreen extends StatefulWidget {
   const PrincipalScreen({super.key});
 
   @override
   State<PrincipalScreen> createState() => _PrincipalScreenState();
-}
+  }
+
 
 class _PrincipalScreenState extends State<PrincipalScreen> {
   final _storage = FlutterSecureStorage();
   final ReporteService _reporteService = ReporteService();
+  final ReporteDetalleService _reporteDetalleService = ReporteDetalleService();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Principal'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refrescarReportes,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text(_error!))
+                : Column(
+                    children: [
+                      // Estadísticas
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildEstadisticaCard(
+                              icon: Icons.list_alt,
+                              label: 'Total',
+                              value: _totalReportes.toString(),
+                              color: Colors.blue,
+                            ),
+                            _buildEstadisticaCard(
+                              icon: Icons.priority_high,
+                              label: 'Prioritarios',
+                              value: _reportesPrioritarios.toString(),
+                              color: Colors.red,
+                            ),
+                            _buildEstadisticaCard(
+                              icon: Icons.pending,
+                              label: 'Pendientes',
+                              value: _reportesPendientes.toString(),
+                              color: Colors.orange,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Lista de reportes
+                      Expanded(
+                        child: PagedListView<int, Reporte>(
+                          pagingController: _pagingController,
+                          builderDelegate: PagedChildBuilderDelegate<Reporte>(
+                            itemBuilder: (context, item, index) =>
+                                _buildReporteCard(item),
+                            noItemsFoundIndicatorBuilder: (context) =>
+                                const Center(
+                              child: Text('No hay reportes.'),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.pushNamed(context, '/CrearReporte');
+        },
+        child: const Icon(Icons.add),
+        tooltip: 'Crear nuevo reporte',
+      ),
+    );
+  }
+
+  Widget _buildEstadisticaCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // Datos del usuario
   String nombreUsuario = 'Usuario';
@@ -150,7 +261,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
       if (!mounted) return;
       setState(() {
-        _imagenesPorReporte = imagenesMap;
+        _imagenesPorReporte.addAll(imagenesMap);
         _cargandoImagenes = false;
       });
     } catch (e) {
@@ -269,186 +380,546 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     }
   }
 
-  /// Widget para construir cada tarjeta de reporte
+  /// Widget para mostrar las imágenes del reporte
+  Widget _buildImagenesReporte(int reporteId) {
+    final imagenes = _imagenesPorReporte[reporteId] ?? [];
+    
+    if (imagenes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      height: 100,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: imagenes.length,
+        itemBuilder: (context, index) {
+          final imagen = imagenes[index];
+          return Container(
+            width: 100,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                imagen['url'] ?? '',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.broken_image),
+                  );
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    color: Colors.grey.shade100,
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildReporteCard(Reporte reporte) {
     return Card(
-      elevation: 4,
+      elevation: 6,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: _getColorPrioridad(reporte.repo_Prioridad),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           _mostrarDetallesReporte(reporte);
-          
         },
-
-        
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header con ID y estado
-           // Header con ID, estado y botón editar
-Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  children: [
-    Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade600,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        'ID: ${reporte.repo_Id}, persona: ${reporte.pers_Id}', 
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
-      ),
-      
-      
-    ),
-    Row(
-      children: [
-        // Estado
-        Row(
-          children: [
-            Icon(
-              _getIconoEstado(reporte.repo_Estado),
-              color: _getColorEstado(reporte.repo_Estado),
-              size: 20,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              _getTextoEstado(reporte.repo_Estado),
-              style: TextStyle(
-                color: _getColorEstado(reporte.repo_Estado),
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        // Botón editar
-        IconButton(
-          onPressed: () {
-            Navigator.pushNamed(
-              context, 
-              '/EditarReporte',
-              arguments: reporte,
-            );
-          },
-          icon: const Icon(Icons.edit, size: 18),
-          tooltip: 'Editar',
-          padding: const EdgeInsets.all(4),
-          constraints: const BoxConstraints(),
-        ),
-      ],
-    ),
-  ],
-),
-
-
-
-              const SizedBox(height: 12),
-
-              // Descripción del reporte
-              Text(
-                reporte.repo_Descripcion,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              const SizedBox(height: 12),
-
-
-              // Imágenes del reporte
-              _buildImagenesReporte(reporte.repo_Id),
-
-              const SizedBox(height: 8),
-
-              // Información del servicio
-              Row(
-                children: [
-                  Icon(Icons.build, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      reporte.serv_Nombre,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // Información de la persona reportante
-              Row(
-                children: [
-                  Icon(Icons.person, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Reportado por: ${reporte.persona}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              //Direccion
-               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.map, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Ubicación del Reporte: ${reporte.repo_Ubicacion ?? 'No especificada'}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Footer con prioridad
+              // Header con ID, estado y botón editar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color:
-                          reporte.repo_Prioridad
-                              ? Colors.red.shade600
-                              : Colors.green.shade600,
-                      borderRadius: BorderRadius.circular(8),
+                      gradient: LinearGradient(
+                        colors: [Colors.blue.shade700, Colors.blue.shade500],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.shade200,
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      'ID: ${reporte.repo_Id}', 
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      // Estado con animación
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getColorEstado(reporte.repo_Estado).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _getColorEstado(reporte.repo_Estado),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _getIconoEstado(reporte.repo_Estado),
+                              color: _getColorEstado(reporte.repo_Estado),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _getTextoEstado(reporte.repo_Estado),
+                              style: TextStyle(
+                                color: _getColorEstado(reporte.repo_Estado),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Botón editar mejorado
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            Navigator.pushNamed(
+                              context, 
+                              '/EditarReporte',
+                              arguments: reporte,
+                            );
+                          },
+                          icon: Icon(Icons.edit, size: 18, color: Colors.orange.shade700),
+                          tooltip: 'Editar',
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Descripción del reporte con mejor tipografía
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Text(
+                  reporte.repo_Descripcion,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Imágenes del reporte
+              _buildImagenesReporte(reporte.repo_Id),
+
+              const SizedBox(height: 12),
+
+              // Información del servicio con iconos mejorados
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade600,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.build, size: 16, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        reporte.serv_Nombre,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Información de la persona reportante
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade600,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.person, size: 16, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Reportado por: ${reporte.persona}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Dirección
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.purple.shade100),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade600,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.map, size: 16, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Ubicación: ${reporte.repo_Ubicacion ?? 'No especificada'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.purple.shade800,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // SECCIÓN DE OBSERVACIONES MEJORADA
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.grey.shade50, Colors.grey.shade100],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.shade300,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // ExpansionTile para ver observaciones
+                    ExpansionTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade600,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.visibility,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                      title: Text(
+                        'Ver Observaciones',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      childrenPadding: const EdgeInsets.all(12),
+                      children: [
+                        FutureBuilder<List<ReporteDetalle>>(
+                          future: _reporteDetalleService.listarPorReporte(reporte.repo_Id),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return Container(
+                                padding: const EdgeInsets.all(20),
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                            
+                            if (snapshot.hasError) {
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.red.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red.shade600,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Error al cargar observaciones',
+                                        style: TextStyle(
+                                          color: Colors.red.shade600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            
+                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.amber.shade200),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      color: Colors.amber.shade700,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'No hay observaciones para este reporte',
+                                        style: TextStyle(
+                                          color: Colors.amber.shade800,
+                                          fontSize: 13,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            
+                            return Column(
+                              children: snapshot.data!.map((detalle) {
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.blue.shade100),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.shade50,
+                                        blurRadius: 3,
+                                        offset: const Offset(2, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 2),
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade100,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(
+                                          Icons.comment,
+                                          size: 16,
+                                          color: Colors.blue.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          detalle.rdet_Observacion,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    
+                    // Divisor elegante
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      height: 1,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            Colors.grey.shade300,
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                    
+                    // Botón Agregar Observación mejorado
+                   Container(
+      decoration: BoxDecoration(
+        color: Colors.green.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IconButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PlantillaBase(
+                titulo: 'Agregar Observación',
+                mostrarBotonRegresar: true,
+                child: ReporteDetalleCrear(
+                  titulo: 'Crear Observación',
+                  reporte: reporte, // Pasas el objeto reporte completo
+                ),
+              ),
+            ),
+          );
+        },
+        icon: Icon(Icons.note_add, size: 18, color: Colors.green.shade700),
+        tooltip: 'Agregar Observación',
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(),
+      ),
+    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Footer con prioridad mejorado
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: reporte.repo_Prioridad
+                            ? [Colors.red.shade600, Colors.red.shade400]
+                            : [Colors.green.shade600, Colors.green.shade400],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (reporte.repo_Prioridad 
+                              ? Colors.red.shade200 
+                              : Colors.green.shade200),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -458,24 +929,31 @@ Row(
                               ? Icons.priority_high
                               : Icons.low_priority,
                           color: Colors.white,
-                          size: 16,
+                          size: 18,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Text(
                           reporte.prioridad,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.grey.shade400,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ],
               ),
@@ -490,321 +968,58 @@ Row(
   void _mostrarDetallesReporte(Reporte reporte) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Reporte #${reporte.repo_Id}'),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildDetalleItem('Descripción:', reporte.repo_Descripcion),
-                  _buildDetalleItem('Servicio:', reporte.serv_Nombre),
-                  _buildDetalleItem('Reportado por:', reporte.persona),
-                  _buildDetalleItem(
-                    'Estado:',
-                    _getTextoEstado(reporte.repo_Estado),
-                  ),
-                  _buildDetalleItem('Prioridad:', reporte.prioridad),
-                  if (reporte.repo_Ubicacion != null &&
-                      reporte.repo_Ubicacion!.isNotEmpty)
-                    _buildDetalleItem('Ubicación:', reporte.repo_Ubicacion!),
-                ],
+      builder: (context) => AlertDialog(
+        title: Text('Reporte #${reporte.repo_Id}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetalleItem('Descripción:', reporte.repo_Descripcion),
+              _buildDetalleItem('Servicio:', reporte.serv_Nombre),
+              _buildDetalleItem('Reportado por:', reporte.persona),
+              _buildDetalleItem(
+                'Estado:',
+                _getTextoEstado(reporte.repo_Estado),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
+              _buildDetalleItem('Prioridad:', reporte.prioridad),
+              if (reporte.repo_Ubicacion != null &&
+                  reporte.repo_Ubicacion!.isNotEmpty)
+                _buildDetalleItem('Ubicación:', reporte.repo_Ubicacion!),
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
     );
   }
 
   /// Widget helper para mostrar detalles en el diálogo
   Widget _buildDetalleItem(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          Text(value, style: const TextStyle(fontSize: 14)),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  /// Widget para mostrar las imágenes de un reporte
-  Widget _buildImagenesReporte(int reporteId) {
-    final imagenes = _imagenesPorReporte[reporteId] ?? [];
-
-    if (_cargandoImagenes && imagenes.isEmpty) {
-      return const SizedBox(
-        height: 40,
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    if (imagenes.isEmpty) {
-      return const SizedBox.shrink(); // No mostrar nada si no hay imágenes
-    }
-
-    return SizedBox(
-      height: 120,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: imagenes.length,
-        itemBuilder: (context, index) {
-          final imagen = imagenes[index];
-          final imagenUrl = imagen['imre_Imagen'];
-
-          return Container(
-            width: 120,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              image: DecorationImage(
-                image: NetworkImage(
-                  'http://sistemareportesgob.somee.com$imagenUrl',
-                ),
-                fit: BoxFit.cover,
-              ),
+            '$label ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  /// Widget para mostrar estadísticas en el header
-  Widget _buildEstadisticaItem(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white, size: 24),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
           ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body:
-          _isLoading
-              ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Cargando reportes...'),
-                  ],
-                ),
-              )
-              : _error != null
-              ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.red.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Error al cargar reportes',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _refrescarReportes,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Intentar nuevamente'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-              : Column(
-                children: [
-                  // Header con información de estadísticas
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.blue.shade600, Colors.blue.shade400],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blue.shade200,
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Resumen de Reportes',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildEstadisticaItem(
-                              'Total',
-                              _totalReportes.toString(),
-                              Icons.list_alt,
-                            ),
-                            _buildEstadisticaItem(
-                              'Prioritarios',
-                              _reportesPrioritarios.toString(),
-                              Icons.priority_high,
-                            ),
-                            _buildEstadisticaItem(
-                              'Pendientes',
-                              _reportesPendientes.toString(),
-                              Icons.pending,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Lista de reportes con paginación
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: _refrescarReportes,
-                      child: PagedListView<int, Reporte>(
-                        pagingController: _pagingController,
-                        builderDelegate: PagedChildBuilderDelegate<Reporte>(
-                          itemBuilder:
-                              (context, reporte, index) =>
-                                  _buildReporteCard(reporte),
-                          firstPageErrorIndicatorBuilder:
-                              (_) => Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.error_outline,
-                                      size: 64,
-                                      color: Colors.red.shade400,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Error al cargar reportes',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red.shade700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ElevatedButton.icon(
-                                      onPressed:
-                                          () => _pagingController.refresh(),
-                                      icon: const Icon(Icons.refresh),
-                                      label: const Text('Intentar nuevamente'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          noItemsFoundIndicatorBuilder:
-                              (_) => Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.inbox_outlined,
-                                      size: 64,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'No hay reportes disponibles',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          newPageProgressIndicatorBuilder:
-                              (_) => const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'crear_reporte',
-        onPressed: () {
-          Navigator.pushNamed(context, '/CrearReporte');
-        },
-        tooltip: 'Crear nuevo reporte',
-        backgroundColor: Colors.green.shade600,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_circle_outline),
-        label: const Text(
-          'Crear Reporte',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
       ),
     );
   }

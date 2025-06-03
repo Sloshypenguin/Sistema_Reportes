@@ -3,6 +3,7 @@ import '../screens/login.dart';
 import '../screens/principal.dart';
 import '../screens/mi_perfil.dart';
 import '../screens/reporteEdit.dart';
+import '../screens/reporteDetalleCrear.dart';
 // import '../screens/reportes.dart';
 import '../layout/plantilla_base.dart';
 import '../widgets/plantilla_widget.dart';
@@ -26,6 +27,8 @@ Route<dynamic> generarRuta(RouteSettings settings) {
       );
       break;
 
+    
+
        case '/EditarReporte':
       pagina = const PlantillaBase(
         titulo: 'Editar Reporte',
@@ -39,6 +42,15 @@ Route<dynamic> generarRuta(RouteSettings settings) {
         titulo: 'Crear Reporte',
         mostrarBotonRegresar: false,
         child: reporteCrear(titulo: 'Crear Reporte'),
+      );
+      break;
+
+
+  case '/ReporteDetalleCrear':
+      pagina = const PlantillaBase(
+        titulo: 'Crear Reporte Detalle',
+        mostrarBotonRegresar: false,
+         child: ReporteDetalleCrear(titulo: 'Crear Reporte Detalle', reporte: null),
       );
       break;
 
