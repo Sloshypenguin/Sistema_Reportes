@@ -147,8 +147,7 @@ class ReporteService {
 
     final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/Insertar');
 
-    // Obtener la fecha actual en formato ISO string
-    final fechaCreacion = DateTime.now().toIso8601String();
+
 
     final body = {
       'pers_Id': personaId,
@@ -157,7 +156,7 @@ class ReporteService {
       'repo_Ubicacion': ubicacion,
       'repo_Prioridad': esPrioritario,
       'usua_Creacion': usuarioCreacion,
-      'repo_FechaCreacion': fechaCreacion,
+
     };
 
     print('=== DEBUG CREAR REPORTE ===');
