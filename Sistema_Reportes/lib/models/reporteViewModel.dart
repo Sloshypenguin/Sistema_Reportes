@@ -19,6 +19,7 @@ class Reporte {
   final String? repo_FechaModificacion;
   final String? repo_EstadoRegistro;
   final String? muni_Codigo;
+  final String? depa_Codigo; // <-- Campo agregado
   final String ubicacion;
 
   Reporte({
@@ -38,7 +39,8 @@ class Reporte {
     this.repo_FechaModificacion,
     this.repo_EstadoRegistro,
     this.muni_Codigo,
-    required this .ubicacion ,
+    this.depa_Codigo, // <-- Campo agregado
+    required this.ubicacion,
   });
 
   /// Crea una instancia de Reporte a partir de un mapa JSON
@@ -60,6 +62,7 @@ class Reporte {
       repo_FechaModificacion: json['repo_FechaModificacion'],
       repo_EstadoRegistro: json['repo_EstadoRegistro'],
       muni_Codigo: json['muni_Codigo'],
+      depa_Codigo: json['depa_Codigo'], // <-- Campo agregado
       ubicacion: json['ubicacion'] ?? '',
     );
   }
@@ -83,6 +86,7 @@ class Reporte {
       'repo_FechaModificacion': repo_FechaModificacion,
       'repo_EstadoRegistro': repo_EstadoRegistro,
       'muni_Codigo': muni_Codigo,
+      'depa_Codigo': depa_Codigo, // <-- Campo agregado
       'ubicacion': ubicacion,
     };
   }
