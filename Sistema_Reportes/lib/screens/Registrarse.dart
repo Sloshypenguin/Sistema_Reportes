@@ -343,19 +343,19 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
     if (result != ConnectivityResult.none && _estadosCiviles.isEmpty) {
       // Verificar si el widget sigue montado
       if (!mounted) return;
-      
+
       // Esperamos un momento para asegurarnos de que la conexión sea estable
       await Future.delayed(const Duration(seconds: 1));
-      
+
       // Verificar nuevamente si el widget sigue montado
       if (!mounted) return;
-      
+
       // Verificamos si realmente hay conexión a internet
       final hasConnection = await _connectivityService.hasConnection();
-      
+
       // Verificar nuevamente si el widget sigue montado
       if (!mounted) return;
-      
+
       if (hasConnection) {
         // Mostrar notificación de carga con barra de progreso
         _mostrarCargando('Reconectando...');
@@ -363,10 +363,10 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
         try {
           // Cargar los estados civiles (esperar a que termine)
           await _cargarEstadosCiviles();
-          
+
           // Verificar si el widget sigue montado y si la carga fue exitosa
           if (!mounted) return;
-          
+
           if (_estadosCiviles.isNotEmpty) {
             // Usar Future.microtask para asegurar que la notificación se muestre correctamente
             Future.microtask(() {
@@ -813,7 +813,9 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
       try {
         // Verificar si la notificación está visible antes de intentar cerrarla
         if (_currentFlushbar!.isShowing() ?? false) {
-          _currentFlushbar!.dismiss(true); // Usar dismiss(true) para forzar el cierre inmediato
+          _currentFlushbar!.dismiss(
+            true,
+          ); // Usar dismiss(true) para forzar el cierre inmediato
         }
       } catch (e) {
         // Ignorar errores al cerrar la notificación
@@ -1989,10 +1991,14 @@ class _RegistroScreenState extends State<RegistrarseScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.assignment_outlined,
-                            size: 50,
-                            color: Colors.blue,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),

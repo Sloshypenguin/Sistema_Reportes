@@ -256,10 +256,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.assignment_outlined,
-                            size: 50,
-                            color: Colors.blue,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -608,12 +612,20 @@ class _LoginScreenState extends State<LoginScreen> {
                                               strokeWidth: 2,
                                             ),
                                           )
-                                          : const Text(
-                                            'INICIAR SESIÓN',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          : const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.login, size: 20),
+                                              SizedBox(width: 10),
+                                              Text(
+                                                'INICIAR SESIÓN',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                 ),
                               ),

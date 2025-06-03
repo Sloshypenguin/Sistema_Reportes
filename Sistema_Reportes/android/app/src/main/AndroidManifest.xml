@@ -9,7 +9,7 @@
 
 
     <application
-        android:label="sistema_reportes"
+        android:label="SIRESP"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
