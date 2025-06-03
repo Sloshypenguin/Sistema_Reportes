@@ -4,6 +4,12 @@ import '../services/reporteService.dart';
 import 'google_maps.dart';
 import '../models/servicioViewModel.dart';
 import '../services/servicioService.dart';
+import '../services/municipioService.dart';
+import '../services/departamentoService.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../models/departamentoViewModel.dart';
+import '../models/municipioViewModel.dart';
 
 class reporteCrear extends StatefulWidget {
   final String titulo;
@@ -22,6 +28,10 @@ class _reporteCrearState extends State<reporteCrear>
   final TextEditingController _ubicacionController = TextEditingController();
   final TextEditingController _personaIdController = TextEditingController();
   final TextEditingController _servicioIdController = TextEditingController();
+  final DepartamentoService _departamentoService = DepartamentoService();
+  final MunicipioService _municipioService = MunicipioService();
+  final ImagePicker _picker = ImagePicker();
+  
 
   // Variables para almacenar las coordenadas de la ubicación seleccionada
   double? _latitud;
@@ -40,6 +50,14 @@ class _reporteCrearState extends State<reporteCrear>
 
   // Valores fijos temporales
   final int _usuaCreacion = 1; // Usuario fijo por ahora
+
+  List<Departamento> _departamentos = [];
+  Departamento? _departamentoSeleccionado;
+  bool _cargandoDepartamentos = true;
+
+  List<Municipio> _municipios = [];
+  Municipio? _municipioSeleccionado;
+  bool _cargandoMunicipios = false;
 
   // Animaciones
   late AnimationController _animationController;
@@ -82,14 +100,24 @@ class _reporteCrearState extends State<reporteCrear>
       setState(() {
         _cargando = true;
         _cargandoServicios = true;
+         _cargandoDepartamentos = true;
       });
 
       // Cargar servicios desde la API
       final servicioService = ServicioService();
       final servicios = await servicioService.listarServiciosActivos();
 
+      final futures = await Future.wait([
+      servicioService.listarServiciosActivos(),
+      _departamentoService.listar(),
+    ]);
+
+     final departamentos = futures[1] as List<Departamento>;
+
       setState(() {
         _servicios = servicios;
+        _departamentos = departamentos;
+        _cargandoDepartamentos = false;
         _cargandoServicios = false;
         _cargando = false;
       });
@@ -98,27 +126,64 @@ class _reporteCrearState extends State<reporteCrear>
       if (servicios.isEmpty) {
         _mostrarError('No hay servicios disponibles');
       }
+       if (departamentos.isEmpty) {
+      _mostrarError('No hay departamentos disponibles');
+    }
     } catch (e) {
       setState(() {
         _cargando = false;
         _cargandoServicios = false;
         _servicios = []; // Asegurar que la lista esté vacía en caso de error
+         _cargandoDepartamentos = false;
       });
       print('Error al cargar servicios: $e');
       _mostrarError('Error al cargar servicios: $e');
     }
   }
 
-  Future<void> _guardarReporte() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
+  Future<void> _cargarMunicipios(String depaCodigo) async {
+  try {
+    setState(() {
+      _cargandoMunicipios = true;
+      _municipios = [];
+      _municipioSeleccionado = null; // Resetear municipio seleccionado
+    });
+
+    final municipios = await _municipioService.listarPorDepartamento(depaCodigo);
+
+    setState(() {
+      _municipios = municipios;
+      _cargandoMunicipios = false;
+    });
+
+    if (municipios.isEmpty) {
+      _mostrarError('No hay municipios disponibles para este departamento');
     }
+  } catch (e) {
+    setState(() {
+      _cargandoMunicipios = false;
+      _municipios = [];
+    });
+    print('Error al cargar municipios: $e');
+    _mostrarError('Error al cargar municipios: $e');
+  }
+}
+
+  Future<void> _guardarReporte() async {
+  if (!_formKey.currentState!.validate()) {
+    return;
+  }
 
     // Validar que se haya seleccionado una ubicación
     if (_ubicacionController.text.isEmpty) {
       _mostrarError('Por favor selecciona una ubicación en el mapa');
       return;
     }
+
+     if (_municipioSeleccionado == null) {
+    _mostrarError('Por favor selecciona un municipio');
+    return;
+  }
 
     try {
       setState(() {
@@ -145,6 +210,7 @@ class _reporteCrearState extends State<reporteCrear>
         ubicacion: ubicacionInfo,
         esPrioritario: _prioridad,
         usuarioCreacion: _usuaCreacion,
+        muniCodigo: _municipioSeleccionado?.muni_Codigo ?? ''
       );
 
       setState(() {
@@ -192,15 +258,18 @@ class _reporteCrearState extends State<reporteCrear>
   }
 
   void _limpiarFormulario() {
-    _descripcionController.clear();
-    _ubicacionController.clear();
-    _personaIdController.clear();
-    _servicioIdController.clear();
-    setState(() {
-      _prioridad = false;
-      _servicioSeleccionado = null;
-    });
-  }
+  _descripcionController.clear();
+  _ubicacionController.clear();
+  _personaIdController.clear();
+  _servicioIdController.clear();
+  setState(() {
+    _prioridad = false;
+    _servicioSeleccionado = null;
+    _departamentoSeleccionado = null;
+    _municipioSeleccionado = null;
+    _municipios = [];
+  });
+}
 
   void _mostrarError(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -335,6 +404,182 @@ class _reporteCrearState extends State<reporteCrear>
       ],
     );
   }
+
+  // Widget para el dropdown de departamentos
+Widget _buildDropdownDepartamentos() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildSectionTitle('Departamento'),
+      const SizedBox(height: 10),
+      _cargandoDepartamentos
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.grey[50],
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Cargando departamentos...'),
+                ],
+              ),
+            )
+          : DropdownButtonFormField<Departamento>(
+              value: _departamentoSeleccionado,
+              decoration: InputDecoration(
+                hintText: _departamentos.isEmpty
+                    ? 'No hay departamentos disponibles'
+                    : 'Selecciona un departamento',
+                prefixIcon: const Icon(Icons.location_city, color: Colors.purple),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              items: _departamentos.isEmpty
+                  ? null
+                  : _departamentos
+                      .map(
+                        (departamento) => DropdownMenuItem<Departamento>(
+                          value: departamento,
+                          child: Text(
+                            departamento.depa_Nombre,
+                            style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+              onChanged: _departamentos.isEmpty
+                  ? null
+                  : (Departamento? departamento) {
+                      setState(() {
+                        _departamentoSeleccionado = departamento;
+                      });
+                      
+                      if (departamento != null) {
+                        print('Departamento seleccionado: ${departamento.depa_Nombre} (Código: ${departamento.depa_Codigo})');
+                        _cargarMunicipios(departamento.depa_Codigo);
+                      }
+                    },
+              validator: (value) {
+                if (value == null) {
+                  return 'Debes seleccionar un departamento';
+                }
+                return null;
+              },
+              isExpanded: true,
+            ),
+    ],
+  );
+}
+
+Widget _buildDropdownMunicipios() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildSectionTitle('Municipio'),
+      const SizedBox(height: 10),
+      _cargandoMunicipios
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.grey[50],
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Cargando municipios...'),
+                ],
+              ),
+            )
+          : DropdownButtonFormField<Municipio>(
+              value: _municipioSeleccionado,
+              decoration: InputDecoration(
+                hintText: _departamentoSeleccionado == null
+                    ? 'Primero selecciona un departamento'
+                    : _municipios.isEmpty
+                        ? 'No hay municipios disponibles'
+                        : 'Selecciona un municipio',
+                prefixIcon: const Icon(Icons.place, color: Colors.green),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.blue, width: 2),
+                ),
+                filled: true,
+                fillColor: _departamentoSeleccionado == null 
+                    ? Colors.grey[100] 
+                    : Colors.grey[50],
+              ),
+              items: _departamentoSeleccionado == null || _municipios.isEmpty
+                  ? null
+                  : _municipios
+                      .map(
+                        (municipio) => DropdownMenuItem<Municipio>(
+                          value: municipio,
+                          child: Text(
+                            municipio.muni_Nombre,
+                            style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+              onChanged: _departamentoSeleccionado == null || _municipios.isEmpty
+                  ? null
+                  : (Municipio? municipio) {
+                      setState(() {
+                        _municipioSeleccionado = municipio;
+                      });
+                      
+                      if (municipio != null) {
+                        print('Municipio seleccionado: ${municipio.muni_Nombre} (Código: ${municipio.muni_Codigo})');
+                      }
+                    },
+              validator: (value) {
+                if (value == null) {
+                  return 'Debes seleccionar un municipio';
+                }
+                return null;
+              },
+              isExpanded: true,
+            ),
+    ],
+  );
+}
 
   @override
   void dispose() {
@@ -504,6 +749,12 @@ class _reporteCrearState extends State<reporteCrear>
                         // Campo Servicio - DROPDOWN CORREGIDO
                         _buildDropdownServicios(),
 
+                        const SizedBox(height: 20),
+
+                        _buildDropdownDepartamentos(),
+                        const SizedBox(height: 20),
+
+                        _buildDropdownMunicipios(),
                         const SizedBox(height: 20),
 
                         // Campo Descripción

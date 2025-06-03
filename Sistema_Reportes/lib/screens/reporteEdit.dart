@@ -9,6 +9,11 @@ import 'google_maps.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
 
+import '../models/departamentoViewModel.dart';
+import '../services/departamentoService.dart';
+import '../models/municipioViewModel.dart';
+import '../services/municipioService.dart';
+
 class ReporteEdit extends StatefulWidget {
   final String titulo;
   
@@ -42,6 +47,7 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
   int? _servicioSeleccionado;
   bool _esPrioritario = false;
   String _estadoSeleccionado = 'P';
+  String? _municipioSeleccionado;
   
   // Variables para Google Maps
   GoogleMapController? _mapController;
@@ -269,6 +275,7 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
         estado: _estadoSeleccionado,
         personaId: int.tryParse(_personaIdController.text.trim()) ?? 0,
         usuarioModificacion: usuarioModificacion,
+        muniCodigo: _municipioSeleccionado!,
       );
       
       setState(() {

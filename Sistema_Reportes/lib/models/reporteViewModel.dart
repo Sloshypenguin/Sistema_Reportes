@@ -18,6 +18,8 @@ class Reporte {
   final int? usua_Modificacion;
   final String? repo_FechaModificacion;
   final String? repo_EstadoRegistro;
+  final String? muni_Codigo;
+  final String ubicacion;
 
   Reporte({
     required this.repo_Id,
@@ -35,6 +37,8 @@ class Reporte {
     this.usua_Modificacion,
     this.repo_FechaModificacion,
     this.repo_EstadoRegistro,
+    this.muni_Codigo,
+    required this .ubicacion ,
   });
 
   /// Crea una instancia de Reporte a partir de un mapa JSON
@@ -55,6 +59,8 @@ class Reporte {
       usua_Modificacion: json['usua_Modificacion'],
       repo_FechaModificacion: json['repo_FechaModificacion'],
       repo_EstadoRegistro: json['repo_EstadoRegistro'],
+      muni_Codigo: json['muni_Codigo'],
+      ubicacion: json['ubicacion'] ?? '',
     );
   }
 
@@ -76,6 +82,8 @@ class Reporte {
       'usua_Modificacion': usua_Modificacion,
       'repo_FechaModificacion': repo_FechaModificacion,
       'repo_EstadoRegistro': repo_EstadoRegistro,
+      'muni_Codigo': muni_Codigo,
+      'ubicacion': ubicacion,
     };
   }
 }
