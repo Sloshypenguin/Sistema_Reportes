@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/reporteDetalleService.dart';
-import '../models/reporteDetalleViewModel.dart';
 import '../models/reporteViewModel.dart';
 
 class ReporteDetalleCrear extends StatefulWidget {
