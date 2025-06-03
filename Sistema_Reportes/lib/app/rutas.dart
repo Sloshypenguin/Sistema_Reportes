@@ -7,6 +7,7 @@ import '../layout/plantilla_base.dart';
 import '../widgets/plantilla_widget.dart';
 import '../screens/reporteCrear.dart';
 import '../screens/google_maps.dart';
+import '../screens/admin.dart';
 
 Route<dynamic> generarRuta(RouteSettings settings) {
   Widget pagina;
@@ -25,7 +26,7 @@ Route<dynamic> generarRuta(RouteSettings settings) {
       );
       break;
 
-      case '/CrearReporte':
+    case '/CrearReporte':
       pagina = const PlantillaBase(
         titulo: 'Crear Reporte',
         mostrarBotonRegresar: false,
@@ -54,7 +55,7 @@ Route<dynamic> generarRuta(RouteSettings settings) {
         child: PlantillaWidget(titulo: 'Ejemplo de Plantilla'),
       );
       break;
-      
+
     case '/google_maps':
       pagina = const PlantillaBase(
         titulo: 'Google Maps',
@@ -63,6 +64,13 @@ Route<dynamic> generarRuta(RouteSettings settings) {
       );
       break;
 
+      case '/dashboard':
+      pagina = const PlantillaBase(
+        titulo: 'Dashboard',
+        mostrarBotonRegresar: false,
+        child: Admin(),
+      );
+      break;
     default:
       pagina = Scaffold(
         appBar: AppBar(title: const Text('Ruta no encontrada')),
