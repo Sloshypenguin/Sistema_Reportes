@@ -216,11 +216,6 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     }
   }
 
-  /// Retorna el color basado en la prioridad del reporte
-  Color _getColorPrioridad(bool esPrioritario) {
-    return esPrioritario ? Colors.red.shade100 : Colors.blue.shade50;
-  }
-
   /// Retorna el icono basado en el estado del reporte
   IconData _getIconoEstado(String estado) {
     switch (estado.toUpperCase()) {
@@ -269,186 +264,211 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     }
   }
 
-  /// Widget para construir cada tarjeta de reporte
   Widget _buildReporteCard(Reporte reporte) {
     return Card(
       elevation: 4,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: _getColorPrioridad(reporte.repo_Prioridad),
+      color: Colors.white, // Fondo blanco como Facebook
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
           _mostrarDetallesReporte(reporte);
-          
         },
-
-        
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header con ID y estado
-           // Header con ID, estado y botón editar
-Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  children: [
-    Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade600,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        'ID: ${reporte.repo_Id}, persona: ${reporte.pers_Id}', 
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
-      ),
-      
-      
-    ),
-    Row(
-      children: [
-        // Estado
-        Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              _getIconoEstado(reporte.repo_Estado),
-              color: _getColorEstado(reporte.repo_Estado),
-              size: 20,
+            // Cabecera estilo Facebook con avatar y datos del autor
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar del usuario
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.blue.shade100,
+                    child: Text(
+                      reporte.persona.isNotEmpty
+                          ? reporte.persona[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Información del autor y reporte
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Nombre del autor
+                        Text(
+                          reporte.persona,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        // Badge de estado en línea separada
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getColorEstado(reporte.repo_Estado),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getIconoEstado(reporte.repo_Estado),
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _getTextoEstado(reporte.repo_Estado),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        // Fecha y servicio
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.build,
+                              size: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              reporte.serv_Nombre,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                        // Ubicación si existe
+                        if (reporte.repo_Ubicacion != null &&
+                            reporte.repo_Ubicacion!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.location_on,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    reporte.repo_Ubicacion!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Menú de opciones
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_horiz, color: Colors.grey.shade700),
+                    itemBuilder:
+                        (context) => [
+                          const PopupMenuItem(
+                            value: 'editar',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit, size: 18),
+                                SizedBox(width: 8),
+                                Text('Editar'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'detalles',
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 18),
+                                SizedBox(width: 8),
+                                Text('Ver detalles'),
+                              ],
+                            ),
+                          ),
+                        ],
+                    onSelected: (value) {
+                      if (value == 'editar') {
+                        Navigator.pushNamed(
+                          context,
+                          '/EditarReporte',
+                          arguments: reporte,
+                        );
+                      } else if (value == 'detalles') {
+                        _mostrarDetallesReporte(reporte);
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 4),
-            Text(
-              _getTextoEstado(reporte.repo_Estado),
-              style: TextStyle(
-                color: _getColorEstado(reporte.repo_Estado),
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        // Botón editar
-        IconButton(
-          onPressed: () {
-            Navigator.pushNamed(
-              context, 
-              '/EditarReporte',
-              arguments: reporte,
-            );
-          },
-          icon: const Icon(Icons.edit, size: 18),
-          tooltip: 'Editar',
-          padding: const EdgeInsets.all(4),
-          constraints: const BoxConstraints(),
-        ),
-      ],
-    ),
-  ],
-),
-
-
-
-              const SizedBox(height: 12),
-
-              // Descripción del reporte
-              Text(
-                reporte.repo_Descripcion,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-
-              const SizedBox(height: 12),
-
-
-              // Imágenes del reporte
-              _buildImagenesReporte(reporte.repo_Id),
-
-              const SizedBox(height: 8),
-
-              // Información del servicio
-              Row(
+            // Divider
+            Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+            // Contenido del reporte
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.build, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      reporte.serv_Nombre,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                  // Descripción del reporte
+                  Text(
+                    reporte.repo_Descripcion,
+                    style: const TextStyle(fontSize: 16),
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // Información de la persona reportante
-              Row(
-                children: [
-                  Icon(Icons.person, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Reportado por: ${reporte.persona}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              //Direccion
-               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.map, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Ubicación del Reporte: ${reporte.repo_Ubicacion ?? 'No especificada'}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Footer con prioridad
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+                  const SizedBox(height: 16),
+                  // Badge de prioridad
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
+                      horizontal: 10,
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color:
                           reporte.repo_Prioridad
-                              ? Colors.red.shade600
-                              : Colors.green.shade600,
-                      borderRadius: BorderRadius.circular(8),
+                              ? Colors.red.shade50
+                              : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color:
+                            reporte.repo_Prioridad
+                                ? Colors.red.shade200
+                                : Colors.green.shade200,
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -457,31 +477,290 @@ Row(
                           reporte.repo_Prioridad
                               ? Icons.priority_high
                               : Icons.low_priority,
-                          color: Colors.white,
+                          color:
+                              reporte.repo_Prioridad
+                                  ? Colors.red.shade700
+                                  : Colors.green.shade700,
                           size: 16,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Text(
                           reporte.prioridad,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
+                          style: TextStyle(
+                            color:
+                                reporte.repo_Prioridad
+                                    ? Colors.red.shade700
+                                    : Colors.green.shade700,
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.grey.shade400,
+                ],
+              ),
+            ),
+            // Imágenes del reporte con estilo mejorado
+            _buildImagenesReporteFacebook(reporte.repo_Id),
+            // Barra de interacción
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Botón de detalles
+                  TextButton.icon(
+                    onPressed: () => _mostrarDetallesReporte(reporte),
+                    icon: Icon(
+                      Icons.info_outline,
+                      size: 20,
+                      color: Colors.blue.shade700,
+                    ),
+                    label: Text(
+                      'Ver detalles',
+                      style: TextStyle(color: Colors.blue.shade700),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                  ),
+                  // Botón de editar
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/EditarReporte',
+                        arguments: reporte,
+                      );
+                    },
+                    icon: Icon(
+                      Icons.edit,
+                      size: 20,
+                      color: Colors.grey.shade700,
+                    ),
+                    label: Text(
+                      'Editar',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
                   ),
                 ],
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Widget para mostrar las imágenes de un reporte con estilo Facebook
+  Widget _buildImagenesReporteFacebook(int reporteId) {
+    final imagenes = _imagenesPorReporte[reporteId] ?? [];
+
+    if (_cargandoImagenes && imagenes.isEmpty) {
+      return const SizedBox(
+        height: 40,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
         ),
+      );
+    }
+
+    if (imagenes.isEmpty) {
+      return const SizedBox.shrink(); // No mostrar nada si no hay imágenes
+    }
+
+    // Si hay solo una imagen, mostrarla a pantalla completa
+    if (imagenes.length == 1) {
+      final imagen = imagenes[0];
+      final imagenUrl = imagen['imre_Imagen'];
+
+      return Container(
+        height: 300,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: NetworkImage(
+              'http://sistemareportesgob.somee.com$imagenUrl',
+            ),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
+    // Si hay 2 imágenes, mostrarlas en grid 1x2
+    if (imagenes.length == 2) {
+      return SizedBox(
+        height: 200,
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: NetworkImage(
+                      'http://sistemareportesgob.somee.com${imagenes[0]['imre_Imagen']}',
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: NetworkImage(
+                      'http://sistemareportesgob.somee.com${imagenes[1]['imre_Imagen']}',
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Si hay 3 o más imágenes, mostrar grid 2x2 con indicador de más
+    if (imagenes.length >= 3) {
+      return SizedBox(
+        height: 240,
+        child: Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            'http://sistemareportesgob.somee.com${imagenes[0]['imre_Imagen']}',
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            'http://sistemareportesgob.somee.com${imagenes[1]['imre_Imagen']}',
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            'http://sistemareportesgob.somee.com${imagenes[2]['imre_Imagen']}',
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child:
+                        imagenes.length > 3
+                            ? Stack(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    image: DecorationImage(
+                                      image: NetworkImage(
+                                        'http://sistemareportesgob.somee.com${imagenes[3]['imre_Imagen']}',
+                                      ),
+                                      fit: BoxFit.cover,
+                                      colorFilter: ColorFilter.mode(
+                                        Colors.black.withOpacity(0.4),
+                                        BlendMode.darken,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (imagenes.length > 4)
+                                  Center(
+                                    child: Text(
+                                      '+${imagenes.length - 4}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            )
+                            : Container(
+                              decoration: BoxDecoration(
+                                image: DecorationImage(
+                                  image: NetworkImage(
+                                    'http://sistemareportesgob.somee.com${imagenes[3]['imre_Imagen']}',
+                                  ),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Fallback al diseño original para otros casos
+    return SizedBox(
+      height: 120,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: imagenes.length,
+        itemBuilder: (context, index) {
+          final imagen = imagenes[index];
+          final imagenUrl = imagen['imre_Imagen'];
+
+          return Container(
+            width: 120,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              image: DecorationImage(
+                image: NetworkImage(
+                  'http://sistemareportesgob.somee.com$imagenUrl',
+                ),
+                fit: BoxFit.cover,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -536,54 +815,6 @@ Row(
           Text(value, style: const TextStyle(fontSize: 14)),
           const SizedBox(height: 4),
         ],
-      ),
-    );
-  }
-
-  /// Widget para mostrar las imágenes de un reporte
-  Widget _buildImagenesReporte(int reporteId) {
-    final imagenes = _imagenesPorReporte[reporteId] ?? [];
-
-    if (_cargandoImagenes && imagenes.isEmpty) {
-      return const SizedBox(
-        height: 40,
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    if (imagenes.isEmpty) {
-      return const SizedBox.shrink(); // No mostrar nada si no hay imágenes
-    }
-
-    return SizedBox(
-      height: 120,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: imagenes.length,
-        itemBuilder: (context, index) {
-          final imagen = imagenes[index];
-          final imagenUrl = imagen['imre_Imagen'];
-
-          return Container(
-            width: 120,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              image: DecorationImage(
-                image: NetworkImage(
-                  'http://sistemareportesgob.somee.com$imagenUrl',
-                ),
-                fit: BoxFit.cover,
-              ),
-            ),
-          );
-        },
       ),
     );
   }

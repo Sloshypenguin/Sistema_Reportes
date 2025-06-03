@@ -648,15 +648,21 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
                                     final resultado = await Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => const GoogleMapsScreen(),
+                                        builder: (context) => const GoogleMapsScreen(seleccionarUbicacion: true),
                                       ),
                                     );
 
-                                    if (resultado != null && resultado is String && resultado.isNotEmpty) {
+                                    if (resultado != null && resultado is Map<String, dynamic>) {
+                                      final direccion = resultado['direccion'] as String;
+                                      final latitud = resultado['latitud'] as double;
+                                      final longitud = resultado['longitud'] as double;
+                                      
                                       setState(() {
-                                        _ubicacionController.text = resultado;
+                                        _ubicacionController.text = '$latitud,$longitud';
+                                        _direccionLegible = direccion;
+                                        _ubicacionActual = LatLng(latitud, longitud);
+                                        _ubicacionValida = true;
                                       });
-                                      _procesarUbicacion(resultado);
                                     }
                                   },
                                 ),
