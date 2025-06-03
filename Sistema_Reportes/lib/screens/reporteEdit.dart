@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/reporteViewModel.dart';
-import '../widgets/plantilla_widget.dart';
-import '../layout/plantilla_base.dart';
 import '../services/servicioService.dart';
 import '../services/reporteService.dart';
 import '../models/servicioViewModel.dart';
 import 'google_maps.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geocoding/geocoding.dart';
+
+import '../models/departamentoViewModel.dart';
+import '../services/departamentoService.dart';
+import '../models/municipioViewModel.dart';
+import '../services/municipioService.dart';
 
 class ReporteEdit extends StatefulWidget {
   final String titulo;
@@ -27,21 +30,32 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
   final _descripcionController = TextEditingController();
   final _ubicacionController = TextEditingController();
   final _personaIdController = TextEditingController();
+
+
   
   // Servicios
   final ReporteService _reporteService = ReporteService();
   final ServicioService _servicioService = ServicioService();
+  final DepartamentoService _departamentoService = DepartamentoService();
+final MunicipioService _municipioService = MunicipioService();
   
   // Variables de estado
   bool _cargando = false;
   bool _guardando = false;
+  bool _cargandoMunicipios = false;
   Reporte? _reporteAEditar;
   List<Servicio> _servicios = [];
-  
+  List<Departamento> _departamentos = [];
+  List<Municipio> _municipios = [];
+
+   
   // Variables del formulario
   int? _servicioSeleccionado;
   bool _esPrioritario = false;
   String _estadoSeleccionado = 'P';
+  String? _municipioSeleccionado;
+  String? _departamentoSeleccionado;
+
   
   // Variables para Google Maps
   GoogleMapController? _mapController;
@@ -89,18 +103,19 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
     }
   }
   
-  void _llenarFormulario() {
-    if (_reporteAEditar != null) {
-      _descripcionController.text = _reporteAEditar!.repo_Descripcion;
-      _ubicacionController.text = _reporteAEditar!.repo_Ubicacion ?? '';
-      _servicioSeleccionado = _reporteAEditar!.serv_Id;
-      _esPrioritario = _reporteAEditar!.repo_Prioridad;
-      _estadoSeleccionado = _reporteAEditar!.repo_Estado;
-      _personaIdController.text = _reporteAEditar!.pers_Id.toString();
-      
-      _procesarUbicacion(_reporteAEditar!.repo_Ubicacion ?? '');
-    }
+ void _llenarFormulario() {
+  if (_reporteAEditar != null) {
+    _descripcionController.text = _reporteAEditar!.repo_Descripcion;
+    _ubicacionController.text = _reporteAEditar!.repo_Ubicacion ?? '';
+    _servicioSeleccionado = _reporteAEditar!.serv_Id;
+    _esPrioritario = _reporteAEditar!.repo_Prioridad;
+    _estadoSeleccionado = _reporteAEditar!.repo_Estado;
+    _personaIdController.text = _reporteAEditar!.pers_Id.toString();
+    
+     _cargarDatosGeograficos();
+    _procesarUbicacion(_reporteAEditar!.repo_Ubicacion ?? '');
   }
+}
 
   void _procesarUbicacion(String ubicacion) {
     if (ubicacion.isEmpty) {
@@ -158,6 +173,46 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
       });
     }
   }
+
+Future<void> _cargarMunicipios(String depaCodigo) async {
+  try {
+    setState(() {
+      _cargandoMunicipios = true;
+    });
+    
+    _municipios = await _municipioService.listarPorDepartamento(depaCodigo);
+    
+    setState(() {
+      _cargandoMunicipios = false;
+    });
+  } catch (e) {
+    setState(() {
+      _cargandoMunicipios = false;
+    });
+    _mostrarError('Error al cargar municipios: $e');
+  }
+}
+
+
+Future<void> _cargarDatosGeograficos() async {
+  if (_reporteAEditar != null && _reporteAEditar!.depa_Codigo != null) {
+    try {
+      // Establecer el departamento seleccionado
+      _departamentoSeleccionado = _reporteAEditar!.depa_Codigo;
+      
+      // Cargar municipios del departamento
+      await _cargarMunicipios(_reporteAEditar!.depa_Codigo!);
+      
+      // Establecer el municipio seleccionado
+      _municipioSeleccionado = _reporteAEditar!.muni_Codigo;
+      
+      setState(() {});
+    } catch (e) {
+      _mostrarError('Error al cargar datos geográficos: $e');
+    }
+  }
+}
+
 
   Future<void> _obtenerDireccionLegible(double lat, double lng) async {
     try {
@@ -218,25 +273,31 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
     }
   }
 
-  Future<void> _cargarDatos() async {
-    try {
-      setState(() {
-        _cargando = true;
-      });
-      
-      _servicios = await _servicioService.listarServicios();
-      
-      setState(() {
-        _cargando = false;
-      });
-    } catch (e) {
-      setState(() {
-        _cargando = false;
-      });
-      _mostrarError('Error al cargar datos: $e');
-      debugPrint('Error en _cargarDatos: $e');
-    }
+ Future<void> _cargarDatos() async {
+  try {
+    setState(() {
+      _cargando = true;
+    });
+    
+    // Cargar servicios y departamentos en paralelo
+    final futures = await Future.wait([
+      _servicioService.listarServicios(),
+      _departamentoService.listar(),
+    ]);
+    
+    _servicios = futures[0] as List<Servicio>;
+    _departamentos = futures[1] as List<Departamento>;
+
+    setState(() {
+      _cargando = false;
+    });
+  } catch (e) {
+    setState(() {
+      _cargando = false;
+    });
+    _mostrarError('Error al cargar datos: $e');
   }
+}
   
   Future<void> _actualizarReporte() async {
     if (!_formKey.currentState!.validate()) {
@@ -269,6 +330,7 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
         estado: _estadoSeleccionado,
         personaId: int.tryParse(_personaIdController.text.trim()) ?? 0,
         usuarioModificacion: usuarioModificacion,
+        muniCodigo: _municipioSeleccionado!,
       );
       
       setState(() {
@@ -548,7 +610,7 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
                         ),
                         
                         const SizedBox(height: 20),
-                        
+
                         // Campo de descripción
                         Container(
                           decoration: BoxDecoration(
@@ -596,6 +658,131 @@ class _ReporteEditState extends State<ReporteEdit> with TickerProviderStateMixin
                         ),
                         
                         const SizedBox(height: 20),
+
+
+// Dropdown de departamentos
+Container(
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(15),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.grey.withOpacity(0.1),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  ),
+  child: DropdownButtonFormField<String>(
+    value: _departamentoSeleccionado,
+    decoration: InputDecoration(
+      labelText: 'Departamento',
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
+        borderSide: BorderSide.none,
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      prefixIcon: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).primaryColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(Icons.location_city, color: Theme.of(context).primaryColor),
+      ),
+      contentPadding: const EdgeInsets.all(16),
+    ),
+    items: _departamentos.map((departamento) {
+      return DropdownMenuItem<String>(
+        value: departamento.depa_Codigo,
+        child: Text(departamento.depa_Nombre),
+      );
+    }).toList(),
+    onChanged: (value) async {
+      if (value != null) {
+        setState(() {
+          _departamentoSeleccionado = value;
+          _municipioSeleccionado = null; // Limpiar municipio seleccionado
+          _municipios.clear(); // Limpiar lista de municipios
+        });
+        await _cargarMunicipios(value);
+      }
+    },
+    validator: (value) {
+      if (value == null || value.isEmpty) {
+        return 'Debe seleccionar un departamento';
+      }
+      return null;
+    },
+  ),
+),
+
+const SizedBox(height: 20),
+                     
+                        Container(
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(15),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.grey.withOpacity(0.1),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      ),
+    ],
+  ),
+  child: DropdownButtonFormField<String>(
+    value: _municipioSeleccionado,
+    decoration: InputDecoration(
+      labelText: _cargandoMunicipios ? 'Cargando municipios...' : 'Municipio',
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
+        borderSide: BorderSide.none,
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      prefixIcon: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).primaryColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: _cargandoMunicipios 
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).primaryColor,
+              ),
+            )
+          : Icon(Icons.location_on, color: Theme.of(context).primaryColor),
+      ),
+      contentPadding: const EdgeInsets.all(16),
+    ),
+    items: _municipios.map((municipio) {
+      return DropdownMenuItem<String>(
+        value: municipio.muni_Codigo,
+        child: Text(municipio.muni_Nombre),
+      );
+    }).toList(),
+    onChanged: _cargandoMunicipios ? null : (value) {
+      setState(() {
+        _municipioSeleccionado = value;
+      });
+    },
+    validator: (value) {
+      if (value == null || value.isEmpty) {
+        return 'Debe seleccionar un municipio';
+      }
+      return null;
+    },
+  ),
+),
+
+                  const SizedBox(height: 20),
+
                         
                         // Campo de ubicación mejorado
                         Container(

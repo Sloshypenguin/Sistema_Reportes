@@ -139,6 +139,7 @@ class ReporteService {
     required String ubicacion,
     required bool esPrioritario,
     required int usuarioCreacion,
+    required String muniCodigo,
   }) async {
     final hasConnection = await _connectivityService.hasConnection();
     if (!hasConnection) {
@@ -156,6 +157,7 @@ class ReporteService {
       'repo_Ubicacion': ubicacion,
       'repo_Prioridad': esPrioritario,
       'usua_Creacion': usuarioCreacion,
+      'muni_Codigo' : muniCodigo,
 
     };
 
@@ -259,6 +261,7 @@ class ReporteService {
       ubicacion: reporte.repo_Ubicacion ?? '',
       esPrioritario: reporte.repo_Prioridad,
       usuarioCreacion: usuarioCreacion,
+      muniCodigo: reporte.muni_Codigo ?? '',
     );
   }
 
@@ -270,6 +273,7 @@ class ReporteService {
     required String ubicacion,
     required bool esPrioritario,
     required int usuarioCreacion,
+    required String muniCodigo,
   }) async {
     final resultado = await crearReporte(
       personaId: personaId,
@@ -278,6 +282,7 @@ class ReporteService {
       ubicacion: ubicacion,
       esPrioritario: esPrioritario,
       usuarioCreacion: usuarioCreacion,
+      muniCodigo: muniCodigo, 
     );
     return resultado['success'] ?? false;
   }
@@ -292,6 +297,7 @@ Future<Map<String, dynamic>> actualizarReporte({
   required String estado,
   required int usuarioModificacion,
   required int personaId,
+  required String muniCodigo,
 }) async {
   final hasConnection = await _connectivityService.hasConnection();
   if (!hasConnection) {
@@ -395,6 +401,7 @@ Future<Map<String, dynamic>> actualizarReporteFromObject(Reporte reporte, int us
     estado: reporte.repo_Estado,
     usuarioModificacion: usuarioModificacion,
     personaId: reporte.pers_Id,
+    muniCodigo: reporte.muni_Codigo ?? '',
   );
 }
 
@@ -407,6 +414,7 @@ Future<bool> actualizarReporteSimple({
   required bool esPrioritario,
   required String estado,
   required int usuarioModificacion,
+  required String muniCodigo,
 }) async {
   final resultado = await actualizarReporte(
     reporteId: reporteId,
@@ -416,7 +424,9 @@ Future<bool> actualizarReporteSimple({
     esPrioritario: esPrioritario,
     estado: estado,
     usuarioModificacion: usuarioModificacion,
+    muniCodigo: muniCodigo,
     personaId: 1, // Asignar un valor por defecto o pasar el ID de la persona si es necesario
+    
   );
   return resultado['success'] ?? false;
 }

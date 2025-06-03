@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/municipioViewModel.dart';
-import '../models/apiResponse.dart';
 import '../config/api_config.dart';
 import '../services/connectivityService.dart';
 
