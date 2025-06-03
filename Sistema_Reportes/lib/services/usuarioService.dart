@@ -240,14 +240,14 @@ class UsuarioService {
 
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
-        
+
         // Verificar si la estructura de la respuesta es la esperada
         if (jsonResponse.containsKey('data')) {
           // Nueva estructura de respuesta
           final data = jsonResponse['data'];
           final codeStatus = data['code_Status'] ?? 0;
           final messageStatus = data['message_Status'] ?? 'Error desconocido';
-          
+
           return {
             'exito': codeStatus == 1,
             'mensaje': messageStatus,
@@ -256,8 +256,9 @@ class UsuarioService {
         } else {
           // Estructura antigua por si acaso
           final codeStatus = jsonResponse['code_Status'] ?? 0;
-          final messageStatus = jsonResponse['message_Status'] ?? 'Error desconocido';
-          
+          final messageStatus =
+              jsonResponse['message_Status'] ?? 'Error desconocido';
+
           return {
             'exito': codeStatus == 1,
             'mensaje': messageStatus,
@@ -267,7 +268,8 @@ class UsuarioService {
       } else {
         return {
           'exito': false,
-          'mensaje': 'Error al actualizar el perfil. Código: ${response.statusCode}',
+          'mensaje':
+              'Error al actualizar el perfil. Código: ${response.statusCode}',
           'codeStatus': 0,
         };
       }

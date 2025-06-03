@@ -505,25 +505,8 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
+
                             // ID del reporte
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                'ID: ${reporte.repo_Id}',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade800,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -536,11 +519,15 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                               color: Colors.grey.shade600,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              reporte.serv_Nombre,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade700,
+                            Expanded(
+                              child: Text(
+                                reporte.serv_Nombre,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                             ),
                           ],
@@ -578,7 +565,10 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       ),
                       // Menú de más opciones
                       PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert, color: Colors.grey.shade700),
+                        icon: Icon(
+                          Icons.more_vert,
+                          color: Colors.grey.shade700,
+                        ),
                         itemBuilder:
                             (context) => [
                               const PopupMenuItem(
@@ -631,14 +621,14 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Imágenes del reporte
                   _buildImagenesReporte(reporte.repo_Id),
-                  
+
                   const SizedBox(height: 12),
-                  
+
                   // Ubicación del reporte
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -655,7 +645,11 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                             color: Colors.purple.shade600,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Icon(Icons.map, size: 16, color: Colors.white),
+                          child: const Icon(
+                            Icons.map,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -671,9 +665,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 12),
-                  
+
                   // Información del servicio con iconos mejorados
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -745,11 +739,12 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => PlantillaBase(
-                            titulo: 'Observaciones del Reporte',
-                            mostrarBotonRegresar: true,
-                            child: _ObservacionesScreen(reporte: reporte),
-                          ),
+                          builder:
+                              (context) => PlantillaBase(
+                                titulo: 'Observaciones del Reporte',
+                                mostrarBotonRegresar: true,
+                                child: _ObservacionesScreen(reporte: reporte),
+                              ),
                         ),
                       );
                     },
@@ -853,6 +848,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -864,7 +860,10 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                         colors:
                             reporte.repo_Prioridad
                                 ? [Colors.red.shade600, Colors.red.shade400]
-                                : [Colors.green.shade600, Colors.green.shade400],
+                                : [
+                                  Colors.green.shade600,
+                                  Colors.green.shade400,
+                                ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -892,7 +891,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Prioridad: ${reporte.prioridad}',
+                          ' ${reporte.prioridad}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -1000,13 +999,14 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 // Pantalla para mostrar las observaciones de un reporte
 class _ObservacionesScreen extends StatelessWidget {
   final Reporte reporte;
-  
-  const _ObservacionesScreen({Key? key, required this.reporte}) : super(key: key);
+
+  const _ObservacionesScreen({Key? key, required this.reporte})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final reporteDetalleService = ReporteDetalleService();
-    
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -1034,17 +1034,14 @@ class _ObservacionesScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   reporte.repo_Descripcion,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: Colors.black87,
-                  ),
+                  style: const TextStyle(fontSize: 15, color: Colors.black87),
                 ),
               ],
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Título de observaciones
           Row(
             children: [
@@ -1054,11 +1051,7 @@ class _ObservacionesScreen extends StatelessWidget {
                   color: Colors.blue.shade600,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.comment,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: const Icon(Icons.comment, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               Text(
@@ -1071,18 +1064,16 @@ class _ObservacionesScreen extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Lista de observaciones
           Expanded(
             child: FutureBuilder<List<ReporteDetalle>>(
               future: reporteDetalleService.listarPorReporte(reporte.repo_Id),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                  return const Center(child: CircularProgressIndicator());
                 }
 
                 if (snapshot.hasError) {
@@ -1221,7 +1212,7 @@ class _ObservacionesScreen extends StatelessWidget {
               },
             ),
           ),
-          
+
           // Botón flotante para agregar observación
           Padding(
             padding: const EdgeInsets.only(top: 16.0),
@@ -1230,14 +1221,15 @@ class _ObservacionesScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => PlantillaBase(
-                      titulo: 'Agregar Observación',
-                      mostrarBotonRegresar: true,
-                      child: ReporteDetalleCrear(
-                        titulo: 'Crear Observación',
-                        reporte: reporte,
-                      ),
-                    ),
+                    builder:
+                        (context) => PlantillaBase(
+                          titulo: 'Agregar Observación',
+                          mostrarBotonRegresar: true,
+                          child: ReporteDetalleCrear(
+                            titulo: 'Crear Observación',
+                            reporte: reporte,
+                          ),
+                        ),
                   ),
                 );
               },
@@ -1246,7 +1238,10 @@ class _ObservacionesScreen extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

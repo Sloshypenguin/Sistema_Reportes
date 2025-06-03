@@ -421,6 +421,99 @@ Future<bool> actualizarReporteSimple({
   return resultado['success'] ?? false;
 }
 
+  /// Sube múltiples imágenes asociadas a un reporte
+  /// 
+  /// @param reporteId ID del reporte al que se asociarán las imágenes
+  /// @param imagenes Lista de rutas de las imágenes a subir
+  /// @param usuarioCreacion ID del usuario que realiza la acción
+  /// @return Mapa con el resultado de la operación
+  Future<Map<String, dynamic>> subirImagenesReporte({
+    required int reporteId,
+    required List<String> imagenes,
+    required int usuarioCreacion,
+  }) async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
 
+    final url = Uri.parse('${ApiConfig.baseUrl}/ImagenPorReporte/Subir');
 
+    // Preparar el cuerpo de la solicitud
+    final body = {
+      'repo_Id': reporteId,
+      'usua_Creacion': usuarioCreacion,
+      'imre_Imagen': imagenes, // Lista de rutas de imágenes
+    };
+
+    print('=== DEBUG SUBIR IMÁGENES REPORTE ===');
+    print('URL: $url');
+    print('Body enviado: ${json.encode(body)}');
+    print('Headers: ${ApiConfig.headers}');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: ApiConfig.headers,
+        body: json.encode(body),
+      );
+
+      print('Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('========================');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        
+        // DEBUG: Mostrar toda la estructura de respuesta
+        print('Estructura completa de respuesta: $jsonResponse');
+        
+        if (jsonResponse.containsKey('data') && jsonResponse['data'] != null) {
+          final data = jsonResponse['data'] as Map<String, dynamic>;
+          final apiSuccess = jsonResponse['success'] ?? false;
+          final apiMessage = jsonResponse['message'] ?? 'Operación completada';
+          
+          final codeStatus = data['code_Status'] ?? 0;
+          final messageStatus = data['message_Status'] ?? 'Imágenes procesadas';
+          
+          final operacionExitosa = apiSuccess && codeStatus > 0;
+          
+          return {
+            'success': operacionExitosa,
+            'code': codeStatus,
+            'message': operacionExitosa ? messageStatus : 'Error al subir imágenes',
+            'apiMessage': apiMessage,
+            'spMessage': messageStatus,
+          };
+        }
+        
+        // Fallback si no tiene la estructura esperada pero success es true
+        else if (jsonResponse.containsKey('success') && jsonResponse['success'] == true) {
+          return {
+            'success': true,
+            'code': 1,
+            'message': jsonResponse['message'] ?? 'Imágenes subidas exitosamente',
+          };
+        }
+        
+        // Si llegamos aquí, algo no está bien
+        else {
+          print('Estructura de respuesta inesperada: $jsonResponse');
+          return {
+            'success': false,
+            'code': 0,
+            'message': 'Estructura de respuesta no válida',
+            'rawResponse': jsonResponse,
+          };
+        }
+      } else {
+        print('Error HTTP: ${response.statusCode}');
+        print('Error body: ${response.body}');
+        throw Exception("Error al subir imágenes: ${response.statusCode} - ${response.body}");
+      }
+    } catch (e) {
+      print('Excepción al subir imágenes: $e');
+      throw Exception("Error al procesar la solicitud: $e");
+    }
+  }
 }
