@@ -343,4 +343,45 @@ class DashboardService {
       rethrow;
     }
   }
+
+  /// Obtiene los reportes por municipio filtrados por fecha desde la API
+  Future<List<ReportePorMunicipio>> obtenerReportesPorMunicipioPorFecha(DateTime fechaInicio, DateTime fechaFin) async {
+    final hasConnection = await _connectivityService.hasConnection();
+    if (!hasConnection) {
+      throw Exception("Sin conexión a internet");
+    }
+
+    // Formatear fechas en formato ISO (YYYY-MM-DD)
+    final fechaInicioStr = "${fechaInicio.year}-${fechaInicio.month.toString().padLeft(2, '0')}-${fechaInicio.day.toString().padLeft(2, '0')}";
+    final fechaFinStr = "${fechaFin.year}-${fechaFin.month.toString().padLeft(2, '0')}-${fechaFin.day.toString().padLeft(2, '0')}";
+    
+    final url = Uri.parse('${ApiConfig.baseUrl}/Dashboard/ReportesPorMunicipioPorFecha?fechaInicio=$fechaInicioStr&fechaFin=$fechaFinStr');
+
+    try {
+      final response = await http.get(url, headers: ApiConfig.headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        
+        // Verificar si la respuesta tiene la estructura esperada
+        if (jsonResponse.containsKey('data') && 
+            jsonResponse['success'] == true && 
+            jsonResponse['data'] is List) {
+          
+          final List<dynamic> data = jsonResponse['data'];
+          return data.map((item) => ReportePorMunicipio.fromJson(item)).toList();
+        } else {
+          print('Estructura de respuesta inesperada para reportes por municipio por fecha: $jsonResponse');
+          return [];
+        }
+      } else {
+        print('Error HTTP al obtener reportes por municipio por fecha: ${response.statusCode}');
+        print('Error body: ${response.body}');
+        throw Exception("Error al cargar reportes por municipio por fecha: ${response.statusCode}");
+      }
+    } catch (e) {
+      print('Excepción al obtener reportes por municipio por fecha: $e');
+      rethrow;
+    }
+  }
 }

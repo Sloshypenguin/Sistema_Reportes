@@ -4,6 +4,8 @@ import '../services/reporteService.dart';
 import '../models/reporteViewModel.dart';
 import 'editar_perfil.dart';
 import '../config/api_config.dart';
+import '../layout/plantilla_base.dart';
+import 'observaciones_screen.dart';
 
 class MiPerfil extends StatefulWidget {
   final String titulo;
@@ -56,7 +58,6 @@ class _MiPerfilState extends State<MiPerfil> {
   final ReporteService _reporteService = ReporteService();
   List<Reporte> _reportesUsuario = [];
   bool _cargandoReportes = true;
-  Map<int, List<Map<String, dynamic>>> _imagenesPorReporte = {};
 
   /// Carga los reportes asociados al usuario logueado
   Future<void> _cargarReportesUsuario(int persId) async {
@@ -71,23 +72,11 @@ class _MiPerfilState extends State<MiPerfil> {
       // Obtener los reportes del usuario
       final reportes = await _reporteService.listarReportesPorPersona(persId);
 
-      // Para cada reporte, obtener sus imágenes
-      final imagenesMap = <int, List<Map<String, dynamic>>>{};
-      for (final reporte in reportes) {
-        // Verificar si el widget sigue montado antes de continuar
-        if (!mounted) return;
-        final imagenes = await _reporteService.obtenerImagenesPorReporte(
-          reporte.repo_Id,
-        );
-        imagenesMap[reporte.repo_Id] = imagenes;
-      }
-
       // Verificar si el widget sigue montado antes de actualizar el estado
       if (!mounted) return;
 
       setState(() {
         _reportesUsuario = reportes;
-        _imagenesPorReporte = imagenesMap;
         _cargandoReportes = false;
       });
     } catch (e) {
@@ -168,7 +157,7 @@ class _MiPerfilState extends State<MiPerfil> {
                     backgroundImage:
                         imagenPerfil != null
                             ? NetworkImage(
-                              'http://sistemareportesgob.somee.com${imagenPerfil}',
+                              'http://siresp.somee.com${imagenPerfil}',
                             )
                             : const AssetImage(
                                   'assets/images/logoAcademiaSL.png',
@@ -274,38 +263,238 @@ class _MiPerfilState extends State<MiPerfil> {
           ),
           const SizedBox(height: 16),
 
-          // Lista de reportes del usuario
+          // Botón para ver los reportes del usuario en una página separada
           const Divider(),
           Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Mis reportes',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                if (_cargandoReportes)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+            padding: const EdgeInsets.all(16.0),
+            child: ListTile(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => PlantillaBase(
+                          titulo: 'Mis Reportes',
+                          mostrarBotonRegresar: true,
+                          child: _MisReportesScreen(
+                            nombreUsuario: nombreUsuario,
+                            imagenPerfil: imagenPerfil,
+                            persId: _persId,
+                          ),
+                        ),
                   ),
+                );
+              },
+              leading: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade600,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.list_alt,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              title: Text(
+                'Ver Mis Reportes',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+              subtitle: Text(
+                _cargandoReportes
+                    ? 'Cargando reportes...'
+                    : _reportesUsuario.isEmpty
+                    ? 'No tienes reportes publicados'
+                    : '${_reportesUsuario.length} reportes',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: Colors.blue.shade700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+// Pantalla separada para mostrar los reportes del usuario
+class _MisReportesScreen extends StatefulWidget {
+  final String nombreUsuario;
+  final String? imagenPerfil;
+  final int persId;
+
+  const _MisReportesScreen({
+    required this.nombreUsuario,
+    required this.imagenPerfil,
+    required this.persId,
+  });
+
+  @override
+  State<_MisReportesScreen> createState() => _MisReportesScreenState();
+}
+
+class _MisReportesScreenState extends State<_MisReportesScreen> {
+  final ReporteService _reporteService = ReporteService();
+  List<Reporte> _reportesUsuario = [];
+  bool _cargandoReportes = true;
+  Map<int, List<Map<String, dynamic>>> _imagenesPorReporte = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarReportesUsuario();
+  }
+
+  /// Formatea una fecha a un formato legible
+  String _formatearFecha(dynamic fecha) {
+    try {
+      // Si es un string, convertirlo a DateTime
+      DateTime fechaObj;
+      if (fecha is String) {
+        fechaObj = DateTime.parse(fecha);
+      } else if (fecha is DateTime) {
+        fechaObj = fecha;
+      } else {
+        return 'Fecha no válida';
+      }
+
+      // Verificar si es la fecha por defecto (0001-01-01)
+      if (fechaObj.year <= 1) {
+        return 'No disponible';
+      }
+
+      return '${fechaObj.day}/${fechaObj.month}/${fechaObj.year}';
+    } catch (e) {
+      return 'Fecha no válida';
+    }
+  }
+
+  /// Carga los reportes asociados al usuario logueado
+  Future<void> _cargarReportesUsuario() async {
+    if (!mounted) return;
+
+    try {
+      setState(() {
+        _cargandoReportes = true;
+      });
+
+      // Obtener los reportes del usuario
+      final reportes = await _reporteService.listarReportesPorPersona(
+        widget.persId,
+      );
+
+      // Para cada reporte, obtener sus imágenes
+      final imagenesMap = <int, List<Map<String, dynamic>>>{};
+      for (final reporte in reportes) {
+        if (!mounted) return;
+        final imagenes = await _reporteService.obtenerImagenesPorReporte(
+          reporte.repo_Id,
+        );
+        imagenesMap[reporte.repo_Id] = imagenes;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _reportesUsuario = reportes;
+        _imagenesPorReporte = imagenesMap;
+        _cargandoReportes = false;
+      });
+    } catch (e) {
+      debugPrint('Error al cargar reportes del usuario: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        _cargandoReportes = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Encabezado con información del usuario
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundImage:
+                      widget.imagenPerfil != null
+                          ? NetworkImage(
+                            '${ApiConfig.baseUrl}${widget.imagenPerfil}',
+                          )
+                          : const AssetImage('assets/images/logoAcademiaSL.png')
+                              as ImageProvider,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.nombreUsuario,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Mis reportes',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          const Divider(),
+
+          // Lista de reportes
           _cargandoReportes
               ? const Center(
                 child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text('Cargando reportes...'),
+                  padding: EdgeInsets.all(40.0),
+                  child: CircularProgressIndicator(),
                 ),
               )
               : _reportesUsuario.isEmpty
-              ? const Center(
+              ? Center(
                 child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text('No tienes reportes publicados'),
+                  padding: const EdgeInsets.all(40.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 48,
+                        color: Colors.blue.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No tienes reportes publicados',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
                 ),
               )
               : ListView.builder(
@@ -336,9 +525,9 @@ class _MiPerfilState extends State<MiPerfil> {
                               CircleAvatar(
                                 radius: 20,
                                 backgroundImage:
-                                    imagenPerfil != null
+                                    widget.imagenPerfil != null
                                         ? NetworkImage(
-                                          '${ApiConfig.baseUrl}${imagenPerfil}',
+                                          '${ApiConfig.baseUrl}${widget.imagenPerfil}',
                                         )
                                         : const AssetImage(
                                               'assets/images/logoAcademiaSL.png',
@@ -351,7 +540,7 @@ class _MiPerfilState extends State<MiPerfil> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      nombreUsuario,
+                                      widget.nombreUsuario,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -483,13 +672,81 @@ class _MiPerfilState extends State<MiPerfil> {
                               ),
                             ],
                           ),
+
+                          // Botón para ver observaciones en página separada
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.grey.shade50,
+                                  Colors.grey.shade100,
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.shade300,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: ListTile(
+                              onTap: () {
+                                // Usando una pantalla separada para mostrar las observaciones
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => PlantillaBase(
+                                          titulo: 'Observaciones del Reporte',
+                                          mostrarBotonRegresar: true,
+                                          child: ObservacionesScreen(
+                                            reporte: reporte,
+                                          ),
+                                        ),
+                                  ),
+                                );
+                              },
+                              leading: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade600,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.visibility,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ),
+                              title: Text(
+                                'Ver Observaciones',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.arrow_forward_ios,
+                                size: 16,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   );
                 },
               ),
-          const SizedBox(height: 20),
         ],
       ),
     );

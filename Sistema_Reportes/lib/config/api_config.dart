@@ -4,7 +4,7 @@
 /// como la URL base, claves de autenticación, etc.
 class ApiConfig {
   /// URL base para todas las llamadas a la API
-  static const String baseUrl = 'http://sistemareportesgob.somee.com';
+  static const String baseUrl = 'http://siresp.somee.com';
 
   /// Clave API para autenticación con el servidor
   static const String apiKey = 'bdccf3f3-d486-4e1e-ab44-74081aefcdbc';

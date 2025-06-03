@@ -49,12 +49,12 @@ class _PlantillaBaseState extends State<PlantillaBase> {
     final nombre = await AuthService.obtenerNombreUsuario() ?? 'Usuario';
     final rol = await AuthService.obtenerRol() ?? 'Rol';
     final imagen = await AuthService.obtenerImagenPerfil();
-    
+
     setState(() {
       nombreUsuario = nombre;
       rolUsuario = rol;
       imagenPerfil = imagen;
-      
+
       if (imagenPerfil != null) {
         debugPrint('Imagen de perfil cargada: $imagenPerfil');
       }
@@ -107,20 +107,22 @@ class _PlantillaBaseState extends State<PlantillaBase> {
               child: CircleAvatar(
                 backgroundColor: Colors.blue.shade100,
                 // Mostrar imagen de perfil si está disponible, de lo contrario mostrar la inicial del nombre
-                backgroundImage: imagenPerfil != null
-                    ? NetworkImage('http://sistemareportesgob.somee.com${imagenPerfil}')
-                    : null,
-                child: imagenPerfil == null
-                    ? Text(
-                        nombreUsuario.isNotEmpty
-                            ? nombreUsuario[0].toUpperCase()
-                            : 'U',
-                        style: TextStyle(
-                          color: Colors.blue.shade800,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
+                backgroundImage:
+                    imagenPerfil != null
+                        ? NetworkImage('http://siresp.somee.com${imagenPerfil}')
+                        : null,
+                child:
+                    imagenPerfil == null
+                        ? Text(
+                          nombreUsuario.isNotEmpty
+                              ? nombreUsuario[0].toUpperCase()
+                              : 'U',
+                          style: TextStyle(
+                            color: Colors.blue.shade800,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                        : null,
               ),
             ),
           ),
@@ -145,12 +147,20 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                     radius: 30,
                     backgroundColor: Colors.white,
                     // Mostrar imagen de perfil si está disponible, de lo contrario mostrar icono de persona
-                    backgroundImage: imagenPerfil != null
-                        ? NetworkImage('http://sistemareportesgob.somee.com${imagenPerfil}')
-                        : null,
-                    child: imagenPerfil == null
-                        ? const Icon(Icons.person, size: 40, color: Colors.blue)
-                        : null,
+                    backgroundImage:
+                        imagenPerfil != null
+                            ? NetworkImage(
+                              'http://siresp.somee.com${imagenPerfil}',
+                            )
+                            : null,
+                    child:
+                        imagenPerfil == null
+                            ? const Icon(
+                              Icons.person,
+                              size: 40,
+                              color: Colors.blue,
+                            )
+                            : null,
                   ),
                   const SizedBox(height: 12),
                   Text(

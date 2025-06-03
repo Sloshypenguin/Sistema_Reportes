@@ -21,17 +21,20 @@ class ReporteDetalleService {
     }
 
     if (!hasConnection) {
-      print('No hay conexión a internet al intentar obtener detalles del reporte con ID: $repoId');
-      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+      print(
+        'No hay conexión a internet al intentar obtener detalles del reporte con ID: $repoId',
+      );
+      throw Exception(
+        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+      );
     }
 
-    final url = Uri.parse('${ApiConfig.baseUrl}/ReporteDetalle/ListarPorReporte/$repoId');
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/ReporteDetalle/ListarPorReporte/$repoId',
+    );
 
     try {
-      final response = await http.get(
-        url,
-        headers: ApiConfig.headers,
-      );
+      final response = await http.get(url, headers: ApiConfig.headers);
 
       if (response.statusCode == 200) {
         final jsonMap = jsonDecode(response.body);
@@ -48,7 +51,9 @@ class ReporteDetalleService {
       }
     } catch (e) {
       print('Error técnico al obtener detalles del reporte: ${e.toString()}');
-      throw Exception('Ocurrió un error técnico al intentar obtener los detalles del reporte.');
+      throw Exception(
+        'Ocurrió un error técnico al intentar obtener los detalles del reporte.',
+      );
     }
   }
 
@@ -66,8 +71,12 @@ class ReporteDetalleService {
     }
 
     if (!hasConnection) {
-      print('No hay conexión a internet al intentar insertar observación para el reporte ID: $repoId');
-      throw Exception('No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.');
+      print(
+        'No hay conexión a internet al intentar insertar observación para el reporte ID: $repoId',
+      );
+      throw Exception(
+        'No hay conexión a internet. Por favor, verifica tu conexión e intenta nuevamente.',
+      );
     }
 
     final url = Uri.parse('${ApiConfig.baseUrl}/ReporteDetalle/Insertar');
@@ -113,7 +122,9 @@ class ReporteDetalleService {
       }
     } catch (e) {
       print('Error técnico al insertar observación: ${e.toString()}');
-      throw Exception('Ocurrió un error técnico al intentar insertar la observación.');
+      throw Exception(
+        'Ocurrió un error técnico al intentar insertar la observación.',
+      );
     }
   }
 }
