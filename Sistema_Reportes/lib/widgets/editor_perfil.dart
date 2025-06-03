@@ -38,7 +38,7 @@ class _EditorPerfilState extends State<EditorPerfil> {
   bool _isLoading = false;
   String? _errorNombre;
   String? _errorCorreo;
-  
+
   // Variables para la imagen de perfil
   final ImagePicker _picker = ImagePicker();
   File? _imagenPerfil;
@@ -97,10 +97,10 @@ class _EditorPerfilState extends State<EditorPerfil> {
           _roleId = roleIdStr != null ? int.tryParse(roleIdStr) ?? 0 : 0;
           _esAdmin = esAdminStr == 'true';
           _esEmpleado = esEmpleadoStr == 'true';
-          
+
           // Inicializar la ruta de la imagen con la actual
           _rutaImagenPerfil = _imagenPerfilActual;
-          
+
           if (_imagenPerfilActual != null) {
             debugPrint('Imagen de perfil actual cargada: $_imagenPerfilActual');
           }
@@ -133,7 +133,8 @@ class _EditorPerfilState extends State<EditorPerfil> {
       if (imagen != null) {
         setState(() {
           _imagenPerfil = File(imagen.path);
-          _rutaImagenPerfil = null; // Resetear la ruta cuando se selecciona una nueva imagen
+          _rutaImagenPerfil =
+              null; // Resetear la ruta cuando se selecciona una nueva imagen
         });
 
         // Subir la imagen inmediatamente
@@ -230,10 +231,7 @@ class _EditorPerfilState extends State<EditorPerfil> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(mensaje), backgroundColor: Colors.red),
     );
   }
 
@@ -242,10 +240,7 @@ class _EditorPerfilState extends State<EditorPerfil> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: Colors.green,
-      ),
+      SnackBar(content: Text(mensaje), backgroundColor: Colors.green),
     );
   }
 
@@ -310,7 +305,9 @@ class _EditorPerfilState extends State<EditorPerfil> {
             _usuarioId, // El mismo usuario realiza la modificación
         esEmpleado: _esEmpleado,
         correo: nuevoCorreo,
-        usua_Imagen: _rutaImagenPerfil ?? _imagenPerfilActual, // Usar la nueva imagen o mantener la actual
+        usua_Imagen:
+            _rutaImagenPerfil ??
+            _imagenPerfilActual, // Usar la nueva imagen o mantener la actual
       );
 
       // Verificar resultado
@@ -318,9 +315,10 @@ class _EditorPerfilState extends State<EditorPerfil> {
         // Actualizar datos en el almacenamiento seguro
         await _storage.write(key: 'usuario_nombre', value: nuevoNombre);
         await _storage.write(key: 'usuario_correo', value: nuevoCorreo);
-        
+
         // Actualizar la imagen de perfil si se ha cambiado
-        if (_rutaImagenPerfil != null && _rutaImagenPerfil != _imagenPerfilActual) {
+        if (_rutaImagenPerfil != null &&
+            _rutaImagenPerfil != _imagenPerfilActual) {
           await _storage.write(key: 'usuario_imagen', value: _rutaImagenPerfil);
           debugPrint('Imagen de perfil actualizada: $_rutaImagenPerfil');
         }
@@ -406,20 +404,26 @@ class _EditorPerfilState extends State<EditorPerfil> {
                     radius: 50,
                     backgroundColor: Colors.grey.shade200,
                     // Mostrar imagen seleccionada, imagen actual o icono predeterminado
-                    backgroundImage: _imagenPerfil != null
-                        ? FileImage(_imagenPerfil!)
-                        : (_imagenPerfilActual != null
-                            ? NetworkImage('http://sistemareportesgob.somee.com${_imagenPerfilActual}')
-                            : null) as ImageProvider?,
-                    child: _subiendoImagen
-                        ? const CircularProgressIndicator()
-                        : (_imagenPerfil == null && _imagenPerfilActual == null
-                            ? Icon(
-                                Icons.person,
-                                size: 50,
-                                color: Colors.blue.shade700,
-                              )
-                            : null),
+                    backgroundImage:
+                        _imagenPerfil != null
+                            ? FileImage(_imagenPerfil!)
+                            : (_imagenPerfilActual != null
+                                    ? NetworkImage(
+                                      'http://siresp.somee.com${_imagenPerfilActual}',
+                                    )
+                                    : null)
+                                as ImageProvider?,
+                    child:
+                        _subiendoImagen
+                            ? const CircularProgressIndicator()
+                            : (_imagenPerfil == null &&
+                                    _imagenPerfilActual == null
+                                ? Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: Colors.blue.shade700,
+                                )
+                                : null),
                   ),
                   Positioned(
                     right: 0,

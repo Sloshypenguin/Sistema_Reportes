@@ -10,6 +10,7 @@ import '../widgets/dashboard_resumen_usuarios.dart';
 import '../widgets/dashboard_top_usuarios.dart';
 import '../widgets/dashboard_servicios_mas_reportados.dart';
 import '../widgets/dashboard_resumen_estado_servicio.dart';
+import '../widgets/dashboard_reportes_municipio_fecha.dart';
 // import '../widgets/dashboard_reportes_mensuales.dart'; // Se utilizará cuando se implemente el servicio
 
 class Admin extends StatefulWidget {
@@ -175,6 +176,8 @@ class _AdminState extends State<Admin> {
         DashboardReportesPorServicio(reportesPorServicio: _reportesPorServicio),
         const SizedBox(height: 24),
         DashboardReportesPorMunicipio(reportesPorMunicipio: _reportesPorMunicipio),
+        const SizedBox(height: 24),
+        const DashboardReportesPorMunicipioFecha(),
         const SizedBox(height: 24),
         DashboardReportesPorEstado(reportesPorEstado: _reportesPorEstado),
         const SizedBox(height: 24),

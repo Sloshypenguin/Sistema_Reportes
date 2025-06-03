@@ -587,9 +587,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         width: double.infinity,
         decoration: BoxDecoration(
           image: DecorationImage(
-            image: NetworkImage(
-              'http://sistemareportesgob.somee.com$imagenUrl',
-            ),
+            image: NetworkImage('http://siresp.somee.com$imagenUrl'),
             fit: BoxFit.cover,
           ),
         ),
@@ -607,7 +605,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 decoration: BoxDecoration(
                   image: DecorationImage(
                     image: NetworkImage(
-                      'http://sistemareportesgob.somee.com${imagenes[0]['imre_Imagen']}',
+                      'http://siresp.somee.com${imagenes[0]['imre_Imagen']}',
                     ),
                     fit: BoxFit.cover,
                   ),
@@ -620,7 +618,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 decoration: BoxDecoration(
                   image: DecorationImage(
                     image: NetworkImage(
-                      'http://sistemareportesgob.somee.com${imagenes[1]['imre_Imagen']}',
+                      'http://siresp.somee.com${imagenes[1]['imre_Imagen']}',
                     ),
                     fit: BoxFit.cover,
                   ),
@@ -646,7 +644,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       decoration: BoxDecoration(
                         image: DecorationImage(
                           image: NetworkImage(
-                            'http://sistemareportesgob.somee.com${imagenes[0]['imre_Imagen']}',
+                            'http://siresp.somee.com${imagenes[0]['imre_Imagen']}',
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -659,7 +657,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       decoration: BoxDecoration(
                         image: DecorationImage(
                           image: NetworkImage(
-                            'http://sistemareportesgob.somee.com${imagenes[1]['imre_Imagen']}',
+                            'http://siresp.somee.com${imagenes[1]['imre_Imagen']}',
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -678,7 +676,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                       decoration: BoxDecoration(
                         image: DecorationImage(
                           image: NetworkImage(
-                            'http://sistemareportesgob.somee.com${imagenes[2]['imre_Imagen']}',
+                            'http://siresp.somee.com${imagenes[2]['imre_Imagen']}',
                           ),
                           fit: BoxFit.cover,
                         ),
@@ -695,7 +693,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                                   decoration: BoxDecoration(
                                     image: DecorationImage(
                                       image: NetworkImage(
-                                        'http://sistemareportesgob.somee.com${imagenes[3]['imre_Imagen']}',
+                                        'http://siresp.somee.com${imagenes[3]['imre_Imagen']}',
                                       ),
                                       fit: BoxFit.cover,
                                       colorFilter: ColorFilter.mode(
@@ -722,7 +720,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                               decoration: BoxDecoration(
                                 image: DecorationImage(
                                   image: NetworkImage(
-                                    'http://sistemareportesgob.somee.com${imagenes[3]['imre_Imagen']}',
+                                    'http://siresp.somee.com${imagenes[3]['imre_Imagen']}',
                                   ),
                                   fit: BoxFit.cover,
                                 ),
@@ -753,9 +751,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               image: DecorationImage(
-                image: NetworkImage(
-                  'http://sistemareportesgob.somee.com$imagenUrl',
-                ),
+                image: NetworkImage('http://siresp.somee.com$imagenUrl'),
                 fit: BoxFit.cover,
               ),
             ),

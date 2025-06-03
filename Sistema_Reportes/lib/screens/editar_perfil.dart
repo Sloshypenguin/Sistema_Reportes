@@ -808,7 +808,7 @@ class _EditarPerfilScreenState extends State<EditarPerfilScreen> {
                                         ? FileImage(_imagenPerfil!)
                                         : (_imagenPerfilActual != null
                                                 ? NetworkImage(
-                                                  'http://sistemareportesgob.somee.com${_imagenPerfilActual}',
+                                                  'http://siresp.somee.com${_imagenPerfilActual}',
                                                 )
                                                 : null)
                                             as ImageProvider?,
