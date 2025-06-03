@@ -282,4 +282,146 @@ class ReporteService {
     );
     return resultado['success'] ?? false;
   }
+
+/// Actualiza un reporte existente en la API
+Future<Map<String, dynamic>> actualizarReporte({
+  required int reporteId,
+  required int servicioId,
+  required String descripcion,
+  required String ubicacion,
+  required bool esPrioritario,
+  required String estado,
+  required int usuarioModificacion,
+  required int personaId,
+}) async {
+  final hasConnection = await _connectivityService.hasConnection();
+  if (!hasConnection) {
+    throw Exception("Sin conexión a internet");
+  }
+
+  final url = Uri.parse('${ApiConfig.baseUrl}/Reporte/Actualizar');
+
+  // Obtener la fecha actual en formato ISO string
+  final fechaModificacion = DateTime.now().toIso8601String();
+
+  final body = {
+    'repo_Id': reporteId,
+    'serv_Id': servicioId,
+    'pers_Id': personaId,
+    'repo_Descripcion': descripcion,
+    'repo_Ubicacion': ubicacion,
+    'repo_Prioridad': esPrioritario,
+    'repo_Estado': estado,
+    'usua_Modificacion': usuarioModificacion,
+    'repo_FechaModificacion': fechaModificacion,
+  };
+
+
+
+  final response = await http.put(
+    url,
+    headers: ApiConfig.headers,
+    body: json.encode(body),
+  );
+
+
+
+  if (response.statusCode == 200 || response.statusCode == 201) {
+    try {
+      final Map<String, dynamic> jsonResponse = json.decode(response.body);
+      
+      if (jsonResponse.containsKey('data') && jsonResponse['data'] != null) {
+        final data = jsonResponse['data'] as Map<String, dynamic>;
+        final apiSuccess = jsonResponse['success'] ?? false;
+        final apiMessage = jsonResponse['message'] ?? 'Operación completada';
+        
+        // Obtener los valores del SP desde data
+        final codeStatus = data['code_Status'] ?? 0;
+        final messageStatus = data['message_Status'] ?? 'Reporte procesado';
+        
+        // El éxito se determina por:
+        // 1. La API dice success: true
+        // 2. Y el code_Status del SP es 1 (actualización exitosa)
+        final operacionExitosa = apiSuccess && codeStatus == 1;
+        
+        return {
+          'success': operacionExitosa,
+          'code': codeStatus,
+          'message': operacionExitosa ? messageStatus : 'Error en la actualización',
+          'apiMessage': apiMessage, // Mensaje de la API
+          'spMessage': messageStatus, // Mensaje del SP
+        };
+      }
+      
+      // Fallback: Si no tiene la estructura esperada pero success es true
+      else if (jsonResponse.containsKey('success') && jsonResponse['success'] == true) {
+        return {
+          'success': true,
+          'code': 1,
+          'message': jsonResponse['message'] ?? 'Reporte actualizado exitosamente',
+        };
+      }
+      
+      // Si llegamos aquí, algo no está bien
+      else {
+        print('Estructura de respuesta inesperada: $jsonResponse');
+        return {
+          'success': false,
+          'code': 0,
+          'message': 'Estructura de respuesta no válida',
+          'rawResponse': jsonResponse,
+        };
+      }
+      
+    } catch (parseError) {
+      print('Error al parsear JSON: $parseError');
+      print('Response body: ${response.body}');
+      throw Exception('Error al procesar respuesta del servidor: $parseError');
+    }
+  } else {
+    print('Error HTTP: ${response.statusCode}');
+    print('Error body: ${response.body}');
+    throw Exception("Error al actualizar reporte: ${response.statusCode} - ${response.body}");
+  }
+}
+
+/// Versión alternativa del método actualizarReporte que acepta un objeto Reporte
+Future<Map<String, dynamic>> actualizarReporteFromObject(Reporte reporte, int usuarioModificacion) async {
+  return await actualizarReporte(
+    reporteId: reporte.repo_Id,
+    servicioId: reporte.serv_Id,
+    descripcion: reporte.repo_Descripcion,
+    ubicacion: reporte.repo_Ubicacion ?? '',
+    esPrioritario: reporte.repo_Prioridad,
+    estado: reporte.repo_Estado,
+    usuarioModificacion: usuarioModificacion,
+    personaId: reporte.pers_Id,
+  );
+}
+
+/// Método de conveniencia que retorna solo si fue exitoso o no
+Future<bool> actualizarReporteSimple({
+  required int reporteId,
+  required int servicioId,
+  required String descripcion,
+  required String ubicacion,
+  required bool esPrioritario,
+  required String estado,
+  required int usuarioModificacion,
+}) async {
+  final resultado = await actualizarReporte(
+    reporteId: reporteId,
+    servicioId: servicioId,
+    descripcion: descripcion,
+    ubicacion: ubicacion,
+    esPrioritario: esPrioritario,
+    estado: estado,
+    usuarioModificacion: usuarioModificacion,
+    personaId: 1, // Asignar un valor por defecto o pasar el ID de la persona si es necesario
+  );
+  return resultado['success'] ?? false;
+}
+
+
+
 }

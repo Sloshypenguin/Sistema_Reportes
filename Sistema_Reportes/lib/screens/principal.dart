@@ -280,54 +280,81 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
         borderRadius: BorderRadius.circular(12),
         onTap: () {
           _mostrarDetallesReporte(reporte);
+          
         },
+
+        
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header con ID y estado
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade600,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'ID: ${reporte.repo_Id}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Icon(
-                        _getIconoEstado(reporte.repo_Estado),
-                        color: _getColorEstado(reporte.repo_Estado),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _getTextoEstado(reporte.repo_Estado),
-                        style: TextStyle(
-                          color: _getColorEstado(reporte.repo_Estado),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+           // Header con ID, estado y botón editar
+Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade600,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        'ID: ${reporte.repo_Id}, persona: ${reporte.pers_Id}', 
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+      ),
+      
+      
+    ),
+    Row(
+      children: [
+        // Estado
+        Row(
+          children: [
+            Icon(
+              _getIconoEstado(reporte.repo_Estado),
+              color: _getColorEstado(reporte.repo_Estado),
+              size: 20,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _getTextoEstado(reporte.repo_Estado),
+              style: TextStyle(
+                color: _getColorEstado(reporte.repo_Estado),
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
               ),
+            ),
+          ],
+        ),
+        // Botón editar
+        IconButton(
+          onPressed: () {
+            Navigator.pushNamed(
+              context, 
+              '/EditarReporte',
+              arguments: reporte,
+            );
+          },
+          icon: const Icon(Icons.edit, size: 18),
+          tooltip: 'Editar',
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(),
+        ),
+      ],
+    ),
+  ],
+),
+
+
 
               const SizedBox(height: 12),
 
@@ -344,6 +371,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
               ),
 
               const SizedBox(height: 12),
+
 
               // Imágenes del reporte
               _buildImagenesReporte(reporte.repo_Id),
@@ -378,6 +406,23 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                   Expanded(
                     child: Text(
                       'Reportado por: ${reporte.persona}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              //Direccion
+               const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.map, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Ubicación del Reporte: ${reporte.repo_Ubicacion ?? 'No especificada'}',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade700,
