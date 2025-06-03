@@ -185,6 +185,14 @@ class _PlantillaBaseState extends State<PlantillaBase> {
                 Navigator.pushReplacementNamed(context, '/google_maps');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('Admin Dashboard'),
+              onTap: () {
+                Navigator.pushReplacementNamed(context, '/dashboard');
+              },
+            ),
+
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
